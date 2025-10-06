@@ -220,4 +220,81 @@ class ProductsService {
         available: true
       };
     } catch (error) {
-      logger.error('AliExpre
+      logger.error('AliExpress parse error:', error);
+      return null;
+    }
+  }
+  
+  private async parseTaobao(url: string) {
+    // Simplified Taobao parser
+    try {
+      const itemIdMatch = url.match(/id=(\d+)/);
+      const itemId = itemIdMatch ? itemIdMatch[1] : null;
+      
+      return {
+        store: 'Taobao',
+        sku: itemId,
+        url,
+        name: 'Taobao Product',
+        price: null,
+        currency: 'CNY',
+        imageUrl: null,
+        available: true
+      };
+    } catch (error) {
+      logger.error('Taobao parse error:', error);
+      return null;
+    }
+  }
+  
+  private async parseDefault(url: string) {
+    return {
+      store: 'Unknown',
+      sku: null,
+      url,
+      name: 'Product',
+      price: null,
+      currency: 'USD',
+      imageUrl: null,
+      available: true
+    };
+  }
+
+  async getCatalogCountries() {
+    // Get countries that have products
+    const countries = await prisma.country.findMany({
+      where: {
+        products: {
+          some: {
+            isActive: true
+          }
+        }
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        flagEmoji: true,
+        _count: {
+          select: {
+            products: {
+              where: {
+                isActive: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        name: 'asc'
+      }
+    });
+
+    return countries.map(country => ({
+      ...country,
+      productsCount: country._count.products
+    }));
+  }
+}
+
+export const productsService = new ProductsService();

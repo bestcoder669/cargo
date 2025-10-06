@@ -5,7 +5,7 @@ import { botService } from './bot.service';
 import { logger } from '../../core/logger';
 
 class BotController {
-  async getCountries(request: FastifyRequest, reply: FastifyReply) {
+  async getCountries(_request: FastifyRequest, reply: FastifyReply) {
     try {
       const countries = await botService.getActiveCountries();
       
@@ -196,15 +196,16 @@ class BotController {
     try {
       logger.error('Bot error report:', request.body);
       
-      // Store error in database for analysis
-      await prisma.botError.create({
-        data: {
-          message: request.body.error,
-          stack: request.body.stack,
-          context: request.body.context,
-          createdAt: new Date()
-        }
-      });
+      // Log error for analysis
+      // TODO: Create BotError table in Prisma schema if needed
+      // await prisma.botError.create({
+      //   data: {
+      //     message: request.body.error,
+      //     stack: request.body.stack,
+      //     context: request.body.context,
+      //     createdAt: new Date()
+      //   }
+      // });
       
       reply.send({
         success: true,

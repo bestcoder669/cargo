@@ -8,6 +8,11 @@ import { prisma } from '@cargoexpress/prisma';
 import { redis } from './core/redis';
 import { initializeWebSocket } from './core/websocket/server';
 
+// Fix BigInt serialization
+(BigInt.prototype as any).toJSON = function() {
+  return this.toString();
+};
+
 async function bootstrap() {
   try {
     logger.info('Starting CargoExpress API Server...');

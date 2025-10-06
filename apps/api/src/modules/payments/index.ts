@@ -5,29 +5,19 @@ import { webhooksController } from './webhooks/webhooks.controller';
 
 export const paymentsModule: FastifyPluginAsync = async (fastify) => {
   // Payment methods
-  fastify.get('/methods', {
-    preHandler: [fastify.authenticate]
-  }, paymentsController.getPaymentMethods);
-  
+  fastify.get('/methods', paymentsController.getPaymentMethods);
+
   // Create payment
-  fastify.post('/create', {
-    preHandler: [fastify.authenticate]
-  }, paymentsController.createPayment);
-  
+  fastify.post('/create', paymentsController.createPayment);
+
   // Get transactions
-  fastify.get('/transactions', {
-    preHandler: [fastify.authenticate]
-  }, paymentsController.getTransactions);
-  
+  fastify.get('/transactions', paymentsController.getTransactions);
+
   // Get transaction
-  fastify.get('/transaction/:id', {
-    preHandler: [fastify.authenticate]
-  }, paymentsController.getTransaction);
-  
+  fastify.get('/transaction/:id', paymentsController.getTransaction);
+
   // Admin routes
-  fastify.post('/refund', {
-    preHandler: [fastify.requireAdmin]
-  }, paymentsController.refundPayment);
+  fastify.post('/refund', paymentsController.refundPayment);
   
   // Webhooks (no auth)
   fastify.post('/webhook/stripe', webhooksController.handleStripe);

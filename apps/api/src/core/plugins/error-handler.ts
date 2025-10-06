@@ -1,10 +1,13 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyError } from 'fastify';
+import { logger } from '../logger';
 
 export async function errorHandler(app: FastifyInstance) {
-  app.setErrorHandler((error, request, reply) => {
-    console.error(error);
+  app.setErrorHandler((error: FastifyError, _request, reply) => {
+    logger.error('Request error:', error);
     reply.status(error.statusCode || 500).send({
-      error: error.message || 'Internal Server Error'
+      success: false,
+      error: error.message || 'Internal Server Error',
+      code: error.code
     });
   });
 }

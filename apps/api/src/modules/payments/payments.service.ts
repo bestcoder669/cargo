@@ -12,7 +12,7 @@ import { logger } from '../../core/logger';
 import { stripeProvider } from './providers/stripe.provider';
 import { cryptoProvider } from './providers/crypto.provider';
 import { sbpProvider } from './providers/sbp.provider';
-import { notificationService } from '../notifications/notification.service';
+import { notificationService } from '../notifications/notifications.service';
 import { io } from '../../core/websocket/server';
 import { SocketEvents } from '@cargoexpress/shared';
 

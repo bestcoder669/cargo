@@ -26,8 +26,10 @@ export const authModule: FastifyPluginAsync = async (fastify) => {
   fastify.post('/admin/refresh', authController.refreshAdminToken);
   
   // Logout
-  fastify.post('/logout', {
-    preHandler: [fastify.authenticate]
-  }, authController.logout);
+  fastify.post('/logout', async (request, reply) => {
+    await fastify.authenticate(request, reply);
+    if (reply.sent) return;
+    return authController.logout(request, reply);
+  });
 };
 

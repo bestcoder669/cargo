@@ -1,14 +1,15 @@
 // ==================== apps/bot/src/handlers/message.handler.ts ====================
 
-import { Bot } from 'grammy';
+import { Bot, InlineKeyboard } from 'grammy';
 import { MyContext } from '../core/types';
 import { apiClient } from '../core/api/client';
-import { EMOJI } from '@cargoexpress/shared';
+import { EMOJI, ORDER_STATUS_LABELS, FormatUtils } from '@cargoexpress/shared';
 import { logger } from '../core/logger';
 
 export function handleMessages(bot: Bot<MyContext>) {
   // Обработка трек-номеров
   bot.hears(/^[A-Z0-9]{8,20}$/i, async (ctx) => {
+    if (!ctx.message?.text) return;
     const trackNumber = ctx.message.text.toUpperCase();
     
     try {
@@ -18,7 +19,7 @@ export function handleMessages(bot: Bot<MyContext>) {
         await ctx.reply(
           `${EMOJI.PACKAGE} <b>Заказ найден!</b>\n\n` +
           `Трек: <code>${trackNumber}</code>\n` +
-          `Статус: ${ORDER_STATUS_LABELS[order.status]}\n` +
+          `Статус: ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}\n` +
           `Обновлено: ${FormatUtils.formatDate(order.updatedAt)}\n\n` +
           `Для подробностей нажмите /orders`
         );
@@ -35,6 +36,7 @@ export function handleMessages(bot: Bot<MyContext>) {
   
   // Обработка телефонов
   bot.hears(/^\+?[0-9\s\-\(\)]+$/, async (ctx) => {
+    if (!ctx.message?.text) return;
     if (ctx.message.text.length >= 10 && ctx.message.text.length <= 20) {
       if (ctx.session.scene === 'registration') return; // Skip if in registration
       

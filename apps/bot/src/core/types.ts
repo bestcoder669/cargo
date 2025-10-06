@@ -43,6 +43,7 @@ export interface ShippingData {
   height?: number;
   declaredValue: number;
   description: string;
+  externalTrackNumber?: string;
   addressId: number;
   shippingTariffId: number;
   estimatedCost?: number;

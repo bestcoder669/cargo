@@ -4,48 +4,33 @@ import { ordersController } from './orders.controller';
 
 export const ordersModule: FastifyPluginAsync = async (fastify) => {
   // Create order (authenticated)
-  fastify.post('/', {
-    preHandler: [fastify.authenticate]
-  }, ordersController.createOrder);
-  
+  fastify.post('/', ordersController.createOrder);
+
   // Get orders (authenticated)
-  fastify.get('/', {
-    preHandler: [fastify.authenticate]
-  }, ordersController.getOrders);
-  
+  fastify.get('/', ordersController.getOrders);
+
   // Search orders
-  fastify.get('/search', {
-    preHandler: [fastify.authenticate]
-  }, ordersController.searchOrders);
-  
+  fastify.get('/search', ordersController.searchOrders);
+
   // Statistics (admin only)
-  fastify.get('/statistics', {
-    preHandler: [fastify.requireAdmin]
-  }, ordersController.getStatistics);
-  
+  fastify.get('/statistics', ordersController.getStatistics);
+
   // Track by number (public)
   fastify.get('/track/:trackNumber', ordersController.getOrderByTrackNumber);
-  
+
+  // Get orders by user ID
+  fastify.get('/user/:userId', ordersController.getUserOrders);
+
   // Single order operations
-  fastify.get('/:id', {
-    preHandler: [fastify.authenticate]
-  }, ordersController.getOrder);
-  
-  fastify.patch('/:id', {
-    preHandler: [fastify.authenticate]
-  }, ordersController.updateOrder);
-  
-  fastify.post('/:id/cancel', {
-    preHandler: [fastify.authenticate]
-  }, ordersController.cancelOrder);
-  
+  fastify.get('/:id', ordersController.getOrder);
+
+  fastify.patch('/:id', ordersController.updateOrder);
+
+  fastify.post('/:id/cancel', ordersController.cancelOrder);
+
   // Photos (admin)
-  fastify.post('/:id/photos', {
-    preHandler: [fastify.requireAdmin]
-  }, ordersController.uploadPhoto);
-  
+  fastify.post('/:id/photos', ordersController.uploadPhoto);
+
   // Bulk operations (admin)
-  fastify.post('/bulk/status', {
-    preHandler: [fastify.requireAdmin]
-  }, ordersController.bulkUpdateStatus);
+  fastify.post('/bulk/status', ordersController.bulkUpdateStatus);
 };

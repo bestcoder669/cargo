@@ -8,17 +8,22 @@ import { SocketEvents } from '@cargoexpress/shared';
 
 class OrdersController {
   async createOrder(request: FastifyRequest<{
-    Body: CreateOrderDto
+    Body: CreateOrderDto & { userId?: number }
   }>, reply: FastifyReply) {
     try {
+      // If request is from bot, use userId from body; otherwise use authenticated user
+      const userId = request.user.role === 'bot'
+        ? request.body.userId!
+        : request.user.id;
+
       const order = await ordersService.createOrder({
         ...request.body,
-        userId: request.user.id
+        userId
       });
-      
+
       // Notify via WebSocket
       io.emit(SocketEvents.ORDER_CREATED, order);
-      
+
       reply.code(201).send({
         success: true,
         data: order
@@ -34,20 +39,49 @@ class OrdersController {
   }>, reply: FastifyReply) {
     try {
       const filters = { ...request.query };
-      
+
       // If not admin, filter by user
       if (!request.user.adminId) {
         filters.userId = request.user.id;
       }
-      
+
       const orders = await ordersService.getOrders(filters);
-      
+
       reply.send({
         success: true,
         ...orders
       });
     } catch (error) {
       logger.error('Get orders error:', error);
+      throw error;
+    }
+  }
+
+  async getUserOrders(request: FastifyRequest<{
+    Params: { userId: string };
+    Querystring: any
+  }>, reply: FastifyReply) {
+    try {
+      const userId = parseInt(request.params.userId);
+
+      // Allow bot or check ownership or admin
+      const isBot = request.user.role === 'bot';
+      if (!isBot && request.user.id !== userId && !request.user.adminId) {
+        return reply.code(403).send({
+          success: false,
+          error: 'FORBIDDEN'
+        });
+      }
+
+      const filters = { ...request.query, userId };
+      const orders = await ordersService.getOrders(filters);
+
+      reply.send({
+        success: true,
+        ...orders
+      });
+    } catch (error) {
+      logger.error('Get user orders error:', error);
       throw error;
     }
   }
@@ -65,8 +99,9 @@ class OrdersController {
         });
       }
       
-      // Check ownership
-      if (order.userId !== request.user.id && !request.user.adminId) {
+      // Check ownership (allow bot to access all orders)
+      const isBot = request.user.role === 'bot';
+      if (!isBot && order.userId !== request.user.id && !request.user.adminId) {
         return reply.code(403).send({
           success: false,
           error: 'FORBIDDEN'

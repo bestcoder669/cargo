@@ -1,18 +1,18 @@
 // ==================== apps/bot/src/conversations/calculator.conversation.ts ====================
 
-import { MyContext, MyConversation } from '../core/types';
+import { Conversation } from '@grammyjs/conversations';
+import { MyContext } from '../core/types';
 import { apiClient } from '../core/api/client';
 import { InlineKeyboard } from 'grammy';
-import { 
+import {
   EMOJI,
   CalculationUtils,
-  FormatUtils,
-  CONSTANTS
+  FormatUtils
 } from '@cargoexpress/shared';
 import { logger } from '../core/logger';
 
 export async function calculatorConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   try {
@@ -51,7 +51,7 @@ export async function calculatorConversation(
 }
 
 async function calculateShipping(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext,
   messageId: number
 ) {
@@ -95,8 +95,9 @@ async function calculateShipping(
     `Введите вес посылки в кг:`,
     { parse_mode: 'HTML' }
   );
-  
-  const weightText = await conversation.form.text();
+
+  const weightCtx = await conversation.wait();
+  const weightText = weightCtx.message?.text || '0';
   const weight = parseFloat(weightText.replace(',', '.'));
   
   if (isNaN(weight) || weight <= 0) {
@@ -121,22 +122,26 @@ async function calculateShipping(
   
   if (dimCtx.callbackQuery.data === 'calc_dim_yes') {
     await ctx.reply('Введите длину (см):');
-    const length = parseFloat(await conversation.form.text());
-    
+    const lengthCtx = await conversation.wait();
+    const length = parseFloat(lengthCtx.message?.text || '0');
+
     await ctx.reply('Введите ширину (см):');
-    const width = parseFloat(await conversation.form.text());
-    
+    const widthCtx = await conversation.wait();
+    const width = parseFloat(widthCtx.message?.text || '0');
+
     await ctx.reply('Введите высоту (см):');
-    const height = parseFloat(await conversation.form.text());
-    
+    const heightCtx = await conversation.wait();
+    const height = parseFloat(heightCtx.message?.text || '0');
+
     volumeWeight = CalculationUtils.calculateVolumetricWeight(
       length, width, height
     );
   }
-  
+
   // Enter declared value
   await ctx.reply('Введите стоимость товара в долларах:');
-  const valueText = await conversation.form.text();
+  const valueCtx = await conversation.wait();
+  const valueText = valueCtx.message?.text || '0';
   const declaredValue = parseFloat(valueText);
   
   // Calculate
@@ -184,7 +189,7 @@ async function calculateShipping(
 }
 
 async function calculatePurchase(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext,
   messageId: number
 ) {
@@ -228,18 +233,20 @@ async function calculatePurchase(
     `Введите стоимость товара в долларах:`,
     { parse_mode: 'HTML' }
   );
-  
-  const costText = await conversation.form.text();
+
+  const costCtx = await conversation.wait();
+  const costText = costCtx.message?.text || '0';
   const productCost = parseFloat(costText);
-  
+
   if (isNaN(productCost) || productCost <= 0) {
     await ctx.reply(`${EMOJI.ERROR} Неверная стоимость`);
     return calculatePurchase(conversation, ctx, messageId);
   }
-  
+
   // Enter quantity
   await ctx.reply('Количество товара:');
-  const quantityText = await conversation.form.text();
+  const quantityCtx = await conversation.wait();
+  const quantityText = quantityCtx.message?.text || '1';
   const quantity = parseInt(quantityText) || 1;
   
   // Calculate

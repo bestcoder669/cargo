@@ -3,7 +3,6 @@
 import { prisma } from '@cargoexpress/prisma';
 import { redis } from '../../core/redis';
 import { KeyboardData } from '@cargoexpress/shared';
-import { logger } from '../../core/logger';
 
 class BotService {
   async getActiveCountries() {
@@ -52,7 +51,7 @@ class BotService {
     return cities;
   }
   
-  async getWarehousesByCountry(countryId: number) {
+  async getWarehousesByCountry(countryId: number): Promise<any[]> {
     return prisma.warehouse.findMany({
       where: {
         countryId,
@@ -68,18 +67,18 @@ class BotService {
     });
   }
   
-  async getProductCategories(countryId?: number) {
+  async getProductCategories(_countryId?: number) {
     return prisma.productCategory.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' }
     });
   }
   
-  async getProducts(params: any) {
+  async getProducts(params: any): Promise<{ items: any[]; total: number; page: number; limit: number; pages: number }> {
     const { categoryId, countryId, storeId, search, page = 1, limit = 10 } = params;
-    
+
     const where: any = { isActive: true };
-    
+
     if (categoryId) where.categoryId = categoryId;
     if (countryId) where.countryId = countryId;
     if (storeId) where.storeId = storeId;
@@ -89,7 +88,7 @@ class BotService {
         { description: { contains: search, mode: 'insensitive' } }
       ];
     }
-    
+
     const [items, total] = await Promise.all([
       prisma.product.findMany({
         where,
@@ -104,7 +103,7 @@ class BotService {
       }),
       prisma.product.count({ where })
     ]);
-    
+
     return {
       items,
       total,
@@ -114,7 +113,7 @@ class BotService {
     };
   }
   
-  async getTariffsByWarehouse(warehouseId: number) {
+  async getTariffsByWarehouse(warehouseId: number): Promise<any[]> {
     return prisma.shippingTariff.findMany({
       where: {
         warehouseId,
@@ -131,17 +130,17 @@ class BotService {
     switch (type) {
       case 'countries':
         const countries = await this.getActiveCountries();
-        buttons = countries.map(c => ({
+        buttons = countries.map((c: any) => ({
           id: c.id,
           text: `${c.flagEmoji} ${c.name}`,
           callbackData: `country_${c.id}`,
           emoji: c.flagEmoji
         }));
         break;
-        
+
       case 'cities':
         const cities = await this.getCities(params.countryCode, params.popular);
-        buttons = cities.map(c => ({
+        buttons = cities.map((c: any) => ({
           id: c.id,
           text: c.name,
           callbackData: `city_${c.id}`
@@ -178,7 +177,7 @@ class BotService {
     return { buttons, columns };
   }
   
-  async getUserByTelegramId(telegramId: number) {
+  async getUserByTelegramId(telegramId: number): Promise<any> {
     return prisma.user.findUnique({
       where: { telegramId: BigInt(telegramId) },
       include: {

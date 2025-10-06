@@ -6,17 +6,31 @@ import { logger } from '../../core/logger';
 class SupportController {
   async createChat(request: FastifyRequest<{
     Body: {
-      message: string;
+      userId?: number;
+      message?: string;
+      initialMessage?: string;
       subject?: string;
     }
   }>, reply: FastifyReply) {
     try {
+      // Bot sends userId, initialMessage; Web sends message
+      const isBot = request.user.role === 'bot';
+      const userId = isBot ? (request.body.userId || 0) : request.user.id;
+      const message = request.body.initialMessage || request.body.message || '';
+
+      if (!message) {
+        return reply.code(400).send({
+          success: false,
+          error: 'MESSAGE_REQUIRED'
+        });
+      }
+
       const chat = await supportService.createChat(
-        request.user.id,
-        request.body.message,
+        userId,
+        message,
         request.body.subject
       );
-      
+
       reply.code(201).send({
         success: true,
         data: chat
@@ -151,13 +165,17 @@ class SupportController {
     try {
       const chatId = parseInt(request.params.id);
       const resolved = request.body.resolved !== false;
-      
+
+      // If request is from bot, close on behalf of user (no operatorId)
+      // Otherwise use adminId
+      const operatorId = request.user.role === 'bot' ? null : request.user.adminId;
+
       const chat = await supportService.closeChat(
         chatId,
-        request.user.adminId,
+        operatorId,
         resolved
       );
-      
+
       reply.send({
         success: true,
         data: chat
@@ -210,17 +228,18 @@ class SupportController {
   }>, reply: FastifyReply) {
     try {
       const userId = parseInt(request.params.userId);
-      
-      // Check access
-      if (userId !== request.user.id && !request.user.adminId) {
+
+      // Allow bot or check access
+      const isBot = request.user.role === 'bot';
+      if (!isBot && userId !== request.user.id && !request.user.adminId) {
         return reply.code(403).send({
           success: false,
           error: 'FORBIDDEN'
         });
       }
-      
+
       const history = await supportService.getUserChatHistory(userId);
-      
+
       reply.send({
         success: true,
         data: history
@@ -234,13 +253,49 @@ class SupportController {
   async getStats(request: FastifyRequest, reply: FastifyReply) {
     try {
       const stats = await supportService.getChatStats();
-      
+
       reply.send({
         success: true,
         data: stats
       });
     } catch (error) {
       logger.error('Get stats error:', error);
+      throw error;
+    }
+  }
+
+  async rateChat(request: FastifyRequest<{
+    Params: { id: string };
+    Body: { rating: number }
+  }>, reply: FastifyReply) {
+    try {
+      const chatId = parseInt(request.params.id);
+      const chat = await supportService.rateChat(chatId, request.body.rating);
+
+      reply.send({
+        success: true,
+        data: chat
+      });
+    } catch (error) {
+      logger.error('Rate chat error:', error);
+      throw error;
+    }
+  }
+
+  async updateChat(request: FastifyRequest<{
+    Params: { id: string };
+    Body: any
+  }>, reply: FastifyReply) {
+    try {
+      const chatId = parseInt(request.params.id);
+      const chat = await supportService.updateChat(chatId, request.body);
+
+      reply.send({
+        success: true,
+        data: chat
+      });
+    } catch (error) {
+      logger.error('Update chat error:', error);
       throw error;
     }
   }

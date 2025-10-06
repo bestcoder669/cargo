@@ -2,25 +2,27 @@
 
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { authService } from './auth.service';
-import { CreateUserDto, LoginDto, AdminTokenDto } from './auth.dto';
+import { config } from '../../core/config';
+import { CreateUserDto } from '@cargoexpress/shared';
 import { logger } from '../../core/logger';
+
 
 class AuthController {
   async register(
-    request: FastifyRequest<{ Body: CreateUserDto }>,
+    request: FastifyRequest<{ Body: any }>,
     reply: FastifyReply
   ) {
     try {
-      const user = await authService.register(request.body);
-      
+      const user = await authService.register(request.body as CreateUserDto);
+
       reply.code(201).send({
         success: true,
         data: user,
         message: 'User registered successfully'
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Registration error:', error);
-      
+
       if (error.message === 'User already exists') {
         return reply.code(409).send({
           success: false,
@@ -34,19 +36,19 @@ class AuthController {
   }
   
   async login(
-    request: FastifyRequest<{ Body: LoginDto }>,
+    request: FastifyRequest<{ Body: { phone: string; password?: string } }>,
     reply: FastifyReply
   ) {
     try {
       const result = await authService.login(request.body);
-      
+
       reply.send({
         success: true,
         data: result
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Login error:', error);
-      
+
       if (error.message === 'Invalid credentials') {
         return reply.code(401).send({
           success: false,
@@ -65,14 +67,14 @@ class AuthController {
   ) {
     try {
       const result = await authService.refreshToken(request.body.refreshToken);
-      
+
       reply.send({
         success: true,
         data: result
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Refresh token error:', error);
-      
+
       return reply.code(401).send({
         success: false,
         error: 'INVALID_TOKEN',
@@ -80,7 +82,7 @@ class AuthController {
       });
     }
   }
-  
+
   async verifyBot(
     request: FastifyRequest<{ Body: { telegramId: number } }>,
     reply: FastifyReply
@@ -88,7 +90,7 @@ class AuthController {
     try {
       // Verify bot token
       const botToken = request.headers['x-bot-token'];
-      
+
       if (botToken !== config.BOT_TOKEN) {
         return reply.code(401).send({
           success: false,
@@ -96,16 +98,16 @@ class AuthController {
           message: 'Invalid bot token'
         });
       }
-      
+
       const user = await authService.getUserByTelegramId(request.body.telegramId);
-      
+
       reply.send({
         success: true,
         data: user
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Bot verification error:', error);
-      
+
       return reply.code(404).send({
         success: false,
         error: 'USER_NOT_FOUND',
@@ -113,21 +115,21 @@ class AuthController {
       });
     }
   }
-  
+
   async generateAdminToken(
-    request: FastifyRequest<{ Body: AdminTokenDto }>,
+    request: FastifyRequest<{ Body: { telegramId: number } }>,
     reply: FastifyReply
   ) {
     try {
       const token = await authService.generateAdminToken(request.body);
-      
+
       reply.send({
         success: true,
         data: { token }
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Admin token generation error:', error);
-      
+
       return reply.code(403).send({
         success: false,
         error: 'FORBIDDEN',
@@ -135,21 +137,21 @@ class AuthController {
       });
     }
   }
-  
+
   async validateAdminToken(
     request: FastifyRequest<{ Params: { token: string } }>,
     reply: FastifyReply
   ) {
     try {
       const result = await authService.validateAdminToken(request.params.token);
-      
+
       reply.send({
         success: true,
         data: result
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Admin token validation error:', error);
-      
+
       return reply.code(401).send({
         success: false,
         error: 'INVALID_TOKEN',
@@ -157,21 +159,21 @@ class AuthController {
       });
     }
   }
-  
+
   async refreshAdminToken(
     request: FastifyRequest<{ Body: { refreshToken: string } }>,
     reply: FastifyReply
   ) {
     try {
       const result = await authService.refreshAdminToken(request.body.refreshToken);
-      
+
       reply.send({
         success: true,
         data: result
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Admin refresh error:', error);
-      
+
       return reply.code(401).send({
         success: false,
         error: 'INVALID_TOKEN',
@@ -179,23 +181,18 @@ class AuthController {
       });
     }
   }
-  
+
   async logout(
-    request: FastifyRequest,
+    _request: FastifyRequest,
     reply: FastifyReply
   ) {
     try {
-      const token = request.headers.authorization?.replace('Bearer ', '');
-      
-      if (token) {
-        await authService.revokeToken(token);
-      }
-      
+      // Just acknowledge logout - tokens are stateless
       reply.send({
         success: true,
         message: 'Logged out successfully'
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Logout error:', error);
       throw error;
     }

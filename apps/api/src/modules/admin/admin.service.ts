@@ -3,6 +3,7 @@
 import { prisma } from '@cargoexpress/prisma';
 import { redis } from '../../core/redis';
 import { logger } from '../../core/logger';
+import { SocketEvents } from '@cargoexpress/shared';
 
 class AdminService {
   async getAdminStats() {
@@ -89,14 +90,9 @@ class AdminService {
     ]);
     
     // Support stats
-    const [openChats, avgResponseTime] = await Promise.all([
+    const [openChats] = await Promise.all([
       prisma.supportChat.count({
         where: { status: 'WAITING' }
-      }),
-      // Simple calculation, should be improved
-      prisma.supportChat.aggregate({
-        where: { status: 'RESOLVED' },
-        _avg: { resolvedAt: true }
       })
     ]);
     
@@ -149,10 +145,18 @@ class AdminService {
   }
   
   async getUsers(filters: any) {
-    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = filters;
-    
+    const page = parseInt(filters.page) || 1;
+    const limit = parseInt(filters.limit) || 20;
+    const { sortBy = 'createdAt', sortOrder = 'desc', isBanned } = filters;
+
+    const where: any = {};
+    if (isBanned !== undefined) {
+      where.isBanned = isBanned === 'true' || isBanned === true;
+    }
+
     const [data, total] = await Promise.all([
       prisma.user.findMany({
+        where,
         include: {
           city: true,
           _count: {
@@ -163,21 +167,22 @@ class AdminService {
         take: limit,
         orderBy: { [sortBy]: sortOrder }
       }),
-      prisma.user.count()
+      prisma.user.count({ where })
     ]);
-    
+
     // Calculate additional stats
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    
+
     const todayNew = await prisma.user.count({
       where: { createdAt: { gte: todayStart } }
     });
-    
+
     return {
       data: data.map(user => ({
         ...user,
-        totalSpent: 0 // Should calculate from orders
+        totalSpent: 0, // Should calculate from orders
+        ordersCount: user._count?.orders || 0
       })),
       meta: {
         total,
@@ -186,6 +191,82 @@ class AdminService {
         limit,
         pages: Math.ceil(total / limit)
       }
+    };
+  }
+
+  async getTopUsers(params: any) {
+    const limit = parseInt(params.limit) || 10;
+
+    const users = await prisma.user.findMany({
+      where: {
+        orders: { some: {} }
+      },
+      include: {
+        _count: {
+          select: { orders: true }
+        },
+        orders: {
+          select: {
+            totalPrice: true
+          }
+        }
+      },
+      take: limit
+    });
+
+    const usersWithSpent = users.map(user => ({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      totalSpent: user.orders.reduce((sum, order) => sum + Number(order.totalPrice), 0),
+      ordersCount: user._count.orders
+    }));
+
+    // Sort by totalSpent descending
+    usersWithSpent.sort((a, b) => b.totalSpent - a.totalSpent);
+
+    // Add rank
+    return usersWithSpent.map((user, index) => ({
+      ...user,
+      rank: index + 1
+    }));
+  }
+
+  async getUsersStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const week = new Date();
+    week.setDate(week.getDate() - 7);
+
+    const [total, todayNew, weekNew, active, withOrders, banned] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { createdAt: { gte: today } } }),
+      prisma.user.count({ where: { createdAt: { gte: week } } }),
+      prisma.user.count({
+        where: {
+          orders: {
+            some: {
+              createdAt: { gte: week }
+            }
+          }
+        }
+      }),
+      prisma.user.count({
+        where: {
+          orders: { some: {} }
+        }
+      }),
+      prisma.user.count({ where: { isBanned: true } })
+    ]);
+
+    return {
+      total,
+      today: todayNew,
+      week: weekNew,
+      active,
+      withOrders,
+      banned
     };
   }
   
@@ -209,7 +290,7 @@ class AdminService {
               }
             }
           }
-        ].filter(condition => Object.keys(condition).length > 0)
+        ].filter(condition => Object.keys(condition).length > 0) as any[]
       },
       include: {
         city: true,
@@ -273,8 +354,7 @@ class AdminService {
   
   async getUsersCount(filters: { audience: string }) {
     let where: any = { isActive: true };
-    
-    const today = new Date();
+
     const week = new Date();
     week.setDate(week.getDate() - 7);
     
@@ -325,13 +405,22 @@ class AdminService {
       select: { id: true, telegramId: true }
     });
     
-    let sent = 0;
-    let failed = 0;
-    
-    // Send notifications
-    for (const user of users) {
-      try {
-        await prisma.notification.create({
+    // Import WebSocket io once before sending
+    const { io } = await import('../../core/websocket/server');
+
+    // Send batch to bot via WebSocket
+    io.to('bot').emit(SocketEvents.BROADCAST_MESSAGE, {
+      users: users.map(u => ({
+        telegramId: u.telegramId.toString(),
+        userId: u.id
+      })),
+      message: data.message
+    });
+
+    // Create notifications in database
+    const notifications = await Promise.allSettled(
+      users.map(user =>
+        prisma.notification.create({
           data: {
             userId: user.id,
             type: 'SYSTEM',
@@ -339,35 +428,33 @@ class AdminService {
             message: data.message,
             sentToTelegram: true
           }
+        })
+      )
+    );
+
+    const sent = notifications.filter(r => r.status === 'fulfilled').length;
+    const failed = notifications.filter(r => r.status === 'rejected').length;
+
+    // Log admin action (skip if adminId is invalid)
+    if (data.adminId && data.adminId < 1000000) {
+      try {
+        await prisma.adminAction.create({
+          data: {
+            adminId: data.adminId,
+            action: 'BROADCAST_SENT',
+            details: {
+              audience: data.audience,
+              totalUsers: users.length,
+              sent,
+              failed,
+              message: data.message.substring(0, 100)
+            }
+          }
         });
-        
-        // Emit to bot via Redis pub/sub
-        await redis.publish('bot:broadcast', JSON.stringify({
-          telegramId: user.telegramId.toString(),
-          message: data.message
-        }));
-        
-        sent++;
       } catch (error) {
-        failed++;
-        logger.error(`Broadcast failed for user ${user.id}:`, error);
+        logger.warn('Failed to log admin action:', error);
       }
     }
-    
-    // Log admin action
-    await prisma.adminAction.create({
-      data: {
-        adminId: data.adminId,
-        action: 'BROADCAST_SENT',
-        details: {
-          audience: data.audience,
-          totalUsers: users.length,
-          sent,
-          failed,
-          message: data.message.substring(0, 100)
-        }
-      }
-    });
     
     return {
       sent,
@@ -519,6 +606,102 @@ class AdminService {
         sbpPercent: totalMethodAmount > 0 ? Math.round((methodTotals.sbp || 0) / totalMethodAmount * 100) : 0
       }
     };
+  }
+
+  async cancelOrder(orderId: number, reason?: string) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { user: true }
+    });
+
+    if (!order) {
+      throw new Error('Order not found');
+    }
+
+    // Update order status to cancelled
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date()
+      }
+    });
+
+    // Create status history
+    await prisma.statusHistory.create({
+      data: {
+        orderId,
+        fromStatus: order.status,
+        toStatus: 'CANCELLED',
+        changedBy: 'admin',
+        comment: reason || 'Cancelled by admin'
+      }
+    });
+
+    // Create refund if order was paid
+    if (order.status === 'PAID' || order.status === 'IN_TRANSIT') {
+      await prisma.payment.create({
+        data: {
+          userId: order.userId,
+          orderId: order.id,
+          amount: order.totalPrice,
+          currency: order.currency,
+          status: 'PENDING',
+          type: 'REFUND',
+          method: 'BALANCE'
+        }
+      });
+
+      // Refund to user balance
+      await prisma.user.update({
+        where: { id: order.userId },
+        data: {
+          balance: {
+            increment: order.totalPrice
+          }
+        }
+      });
+    }
+
+    // Send notification to user
+    const { io } = await import('../../core/websocket/server');
+    io.to(`user_${order.userId}`).emit('order:cancelled', {
+      orderId: order.id,
+      reason: reason || 'Cancelled by admin'
+    });
+
+    return updatedOrder;
+  }
+
+  async sendMessageToUser(userId: number, message: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Send via WebSocket to bot
+    const { io } = await import('../../core/websocket/server');
+    io.to('bot').emit('admin:message', {
+      userId,
+      telegramId: user.telegramId.toString(),
+      message
+    });
+
+    // Create notification
+    await prisma.notification.create({
+      data: {
+        userId,
+        type: 'SYSTEM',
+        title: 'Сообщение от администратора',
+        message,
+        sentToTelegram: true
+      }
+    });
+
+    return { success: true };
   }
 }
 

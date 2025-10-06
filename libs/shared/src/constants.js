@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EMOJI = exports.ORDER_STATUS_LABELS = exports.CONSTANTS = void 0;
+const enums_1 = require("./enums");
 exports.CONSTANTS = {
     DEFAULT_PAGE_SIZE: 20,
     MAX_PAGE_SIZE: 100,
@@ -81,21 +82,21 @@ exports.CONSTANTS = {
     }
 };
 exports.ORDER_STATUS_LABELS = {
-    [OrderStatus.PENDING]: '⏳ Ожидает оплаты',
-    [OrderStatus.PAID]: '✅ Оплачен',
-    [OrderStatus.PROCESSING]: '⚙️ В обработке',
-    [OrderStatus.PURCHASING]: '🛍 Покупается',
-    [OrderStatus.WAREHOUSE_RECEIVED]: '📦 Принят на складе',
-    [OrderStatus.PACKING]: '📦 Упаковывается',
-    [OrderStatus.SHIPPED]: '✈️ Отправлен',
-    [OrderStatus.IN_TRANSIT]: '🚚 В пути',
-    [OrderStatus.CUSTOMS_CLEARANCE]: '🏛 Таможенное оформление',
-    [OrderStatus.ARRIVED]: '📍 Прибыл в страну',
-    [OrderStatus.LOCAL_DELIVERY]: '🚚 Местная доставка',
-    [OrderStatus.READY_FOR_PICKUP]: '📬 Готов к выдаче',
-    [OrderStatus.DELIVERED]: '✅ Доставлен',
-    [OrderStatus.CANCELLED]: '❌ Отменен',
-    [OrderStatus.REFUNDED]: '💰 Возвращен'
+    [enums_1.OrderStatus.PENDING]: '⏳ Ожидает оплаты',
+    [enums_1.OrderStatus.PAID]: '✅ Оплачен',
+    [enums_1.OrderStatus.PROCESSING]: '⚙️ В обработке',
+    [enums_1.OrderStatus.PURCHASING]: '🛍 Покупается',
+    [enums_1.OrderStatus.WAREHOUSE_RECEIVED]: '📦 Принят на складе',
+    [enums_1.OrderStatus.PACKING]: '📦 Упаковывается',
+    [enums_1.OrderStatus.SHIPPED]: '✈️ Отправлен',
+    [enums_1.OrderStatus.IN_TRANSIT]: '🚚 В пути',
+    [enums_1.OrderStatus.CUSTOMS_CLEARANCE]: '🏛 Таможенное оформление',
+    [enums_1.OrderStatus.ARRIVED]: '📍 Прибыл в страну',
+    [enums_1.OrderStatus.LOCAL_DELIVERY]: '🚚 Местная доставка',
+    [enums_1.OrderStatus.READY_FOR_PICKUP]: '📬 Готов к выдаче',
+    [enums_1.OrderStatus.DELIVERED]: '✅ Доставлен',
+    [enums_1.OrderStatus.CANCELLED]: '❌ Отменен',
+    [enums_1.OrderStatus.REFUNDED]: '💰 Возвращен'
 };
 exports.EMOJI = {
     USA: '🇺🇸',

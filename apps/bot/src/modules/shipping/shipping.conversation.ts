@@ -1,19 +1,19 @@
 // ==================== apps/bot/src/modules/shipping/shipping.conversation.ts ====================
 
-import { MyContext, MyConversation } from '../../core/types';
+import { Conversation } from '@grammyjs/conversations';
+import { MyContext } from '../../core/types';
 import { apiClient } from '../../core/api/client';
 import { InlineKeyboard } from 'grammy';
-import { 
-  EMOJI, 
+import {
+  EMOJI,
   OrderType,
   CalculationUtils,
-  FormatUtils,
-  CONSTANTS
+  FormatUtils
 } from '@cargoexpress/shared';
 import { logger } from '../../core/logger';
 
 export async function shippingConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   try {
@@ -138,24 +138,46 @@ export async function shippingConversation(
       ctx.chat!.id,
       countryMsg.message_id,
       `${EMOJI.PACKAGE} <b>Вес посылки</b>\n\n` +
-      `<b>Шаг 3/6:</b> Введите вес посылки в кг:\n` +
+      `<b>Шаг 3/7:</b> Введите вес посылки в кг:\n` +
       `<i>Например: 1.5 или 2.3</i>`,
       { parse_mode: 'HTML' }
     );
-    
-    const weightText = await conversation.form.text();
-    const weight = parseFloat(weightText.replace(',', '.'));
-    
-    if (isNaN(weight) || weight <= 0 || weight > 100) {
-      await ctx.reply(
-        `${EMOJI.ERROR} Неверный вес.\n` +
-        `Введите вес от 0.1 до 100 кг.`
-      );
-      return shippingConversation(conversation, ctx);
+
+    let weightCtx;
+    let attempts = 0;
+    while (attempts < 3) {
+      weightCtx = await conversation.wait();
+
+      // Ignore callback queries
+      if (weightCtx.callbackQuery) {
+        await weightCtx.answerCallbackQuery();
+        await ctx.reply(
+          `${EMOJI.INFO} Пожалуйста, введите вес посылки в килограммах.\n` +
+          `Например: 1.5 или 2.3`
+        );
+        continue;
+      }
+
+      const weightText = weightCtx.message?.text || '0';
+      const weight = parseFloat(weightText.replace(',', '.'));
+
+      if (isNaN(weight) || weight < 0.1 || weight > 100) {
+        attempts++;
+        await ctx.reply(
+          `${EMOJI.ERROR} Неверный вес.\n` +
+          `Введите вес от 0.1 до 100 кг.`
+        );
+        if (attempts >= 3) {
+          await ctx.reply('❌ Слишком много попыток. Начните заново: /shipping');
+          return;
+        }
+        continue;
+      }
+
+      ctx.session.shippingData.weight = weight;
+      break;
     }
-    
-    ctx.session.shippingData.weight = weight;
-    
+
     // Step 4: Dimensions (optional)
     const dimensionsKeyboard = new InlineKeyboard()
       .text('Указать размеры', 'dimensions_yes')
@@ -163,7 +185,7 @@ export async function shippingConversation(
     
     await ctx.reply(
       `${EMOJI.PACKAGE} <b>Размеры посылки</b>\n\n` +
-      `<b>Шаг 4/6:</b> Хотите указать размеры?\n` +
+      `<b>Шаг 4/7:</b> Хотите указать размеры?\n` +
       `Это поможет точнее рассчитать стоимость.`,
       { reply_markup: dimensionsKeyboard }
     );
@@ -174,27 +196,30 @@ export async function shippingConversation(
     if (dimCtx.callbackQuery.data === 'dimensions_yes') {
       // Length
       await ctx.reply('Введите длину (см):');
-      const lengthText = await conversation.form.text();
+      const lengthCtx = await conversation.wait();
+      const lengthText = lengthCtx.message?.text || '0';
       const length = parseFloat(lengthText);
-      
+
       if (isNaN(length) || length <= 0) {
         await ctx.reply(`${EMOJI.ERROR} Неверная длина`);
         return shippingConversation(conversation, ctx);
       }
-      
+
       // Width
       await ctx.reply('Введите ширину (см):');
-      const widthText = await conversation.form.text();
+      const widthCtx = await conversation.wait();
+      const widthText = widthCtx.message?.text || '0';
       const width = parseFloat(widthText);
-      
+
       if (isNaN(width) || width <= 0) {
         await ctx.reply(`${EMOJI.ERROR} Неверная ширина`);
         return shippingConversation(conversation, ctx);
       }
-      
+
       // Height
       await ctx.reply('Введите высоту (см):');
-      const heightText = await conversation.form.text();
+      const heightCtx = await conversation.wait();
+      const heightText = heightCtx.message?.text || '0';
       const height = parseFloat(heightText);
       
       if (isNaN(height) || height <= 0) {
@@ -222,11 +247,12 @@ export async function shippingConversation(
     // Step 5: Declared value
     await ctx.reply(
       `${EMOJI.PACKAGE} <b>Стоимость содержимого</b>\n\n` +
-      `<b>Шаг 5/6:</b> Укажите стоимость содержимого в долларах:\n` +
+      `<b>Шаг 5/7:</b> Укажите стоимость содержимого в долларах:\n` +
       `<i>Для таможенного декларирования</i>`
     );
-    
-    const valueText = await conversation.form.text();
+
+    const valueCtx = await conversation.wait();
+    const valueText = valueCtx.message?.text || '0';
     const declaredValue = parseFloat(valueText);
     
     if (isNaN(declaredValue) || declaredValue <= 0) {
@@ -239,13 +265,46 @@ export async function shippingConversation(
     // Step 6: Description
     await ctx.reply(
       `${EMOJI.PACKAGE} <b>Описание посылки</b>\n\n` +
-      `<b>Шаг 6/6:</b> Кратко опишите содержимое:\n` +
+      `<b>Шаг 6/7:</b> Кратко опишите содержимое:\n` +
       `<i>Например: Одежда, электроника, косметика</i>`
     );
-    
-    const description = await conversation.form.text();
+
+    const descCtx = await conversation.wait();
+    const description = descCtx.message?.text || '';
     ctx.session.shippingData.description = description;
-    
+
+    // Step 7: External tracking number (required)
+    await ctx.reply(
+      `${EMOJI.PACKAGE} <b>Трек-номер посылки</b>\n\n` +
+      `<b>Шаг 7/7:</b> Введите трек-номер вашей посылки от транспортной компании:\n\n` +
+      `<i>Этот номер вы получили при отправке посылки на наш склад</i>`
+    );
+
+    let trackCtx;
+    let trackAttempts = 0;
+    while (trackAttempts < 3) {
+      trackCtx = await conversation.wait();
+
+      const externalTrack = trackCtx.message?.text?.trim();
+
+      if (!externalTrack || externalTrack.length < 5 || externalTrack.length > 50) {
+        trackAttempts++;
+        await ctx.reply(
+          `${EMOJI.ERROR} Неверный формат трек-номера.\n` +
+          `Введите трек-номер от 5 до 50 символов.`
+        );
+        if (trackAttempts >= 3) {
+          await ctx.reply('❌ Слишком много попыток. Начните заново: /shipping');
+          return;
+        }
+        continue;
+      }
+
+      ctx.session.shippingData.externalTrackNumber = externalTrack;
+      await ctx.reply(`${EMOJI.SUCCESS} Трек-номер сохранен: ${externalTrack}`);
+      break;
+    }
+
     // Select delivery address
     const addresses = await apiClient.getUserAddresses(ctx.session.userId!);
     
@@ -273,10 +332,12 @@ export async function shippingConversation(
       if (addrCtx.callbackQuery.data === 'address_new') {
         // Create new address
         await ctx.reply('Введите название адреса (Дом, Офис и т.д.):');
-        const name = await conversation.form.text();
-        
+        const nameCtx = await conversation.wait();
+        const name = nameCtx.message?.text || '';
+
         await ctx.reply('Введите полный адрес:');
-        const address = await conversation.form.text();
+        const addressCtx = await conversation.wait();
+        const address = addressCtx.message?.text || '';
         
         const newAddress = await apiClient.createAddress(ctx.session.userId!, {
           name,
@@ -303,7 +364,7 @@ export async function shippingConversation(
     ctx.session.shippingData.addressId = addressId;
     
     // Calculate shipping cost
-    const calculation = await apiClient.calculateShipping({
+    const calculationResult = await apiClient.calculateShipping({
       fromCountryId: ctx.session.shippingData.countryId!,
       weight: ctx.session.shippingData.weight!,
       length: ctx.session.shippingData.length,
@@ -311,30 +372,44 @@ export async function shippingConversation(
       height: ctx.session.shippingData.height,
       declaredValue: ctx.session.shippingData.declaredValue
     });
-    
+
+    // Get cheapest option (first one, sorted by price)
+    const calculation = calculationResult.options[0];
+
+    if (!calculation) {
+      await ctx.reply(
+        `${EMOJI.ERROR} Не удалось рассчитать стоимость доставки.\n` +
+        `Попробуйте позже или обратитесь в поддержку.`
+      );
+      return;
+    }
+
+    // Save tariff ID for order creation
+    ctx.session.shippingData.tariffId = calculation.tariffId;
+
     const confirmKeyboard = new InlineKeyboard()
       .text(`${EMOJI.SUCCESS} Создать заказ`, 'confirm_order')
       .text(`${EMOJI.CLOSE} Отменить`, 'cancel_order');
-    
+
     await ctx.reply(
       `${EMOJI.PACKAGE} <b>Подтверждение заказа</b>\n\n` +
-      
+
       `<b>Откуда:</b> ${country?.flagEmoji} ${country?.name}\n` +
-      `<b>Склад:</b> ${warehouse?.name}\n` +
+      `<b>Склад:</b> ${calculation.warehouseName}\n` +
       `<b>Вес:</b> ${FormatUtils.formatWeight(ctx.session.shippingData.weight!)}\n` +
-      (ctx.session.shippingData.length ? 
+      (ctx.session.shippingData.length ?
         `<b>Размеры:</b> ${ctx.session.shippingData.length}×${ctx.session.shippingData.width}×${ctx.session.shippingData.height} см\n` : '') +
       `<b>Стоимость товара:</b> $${ctx.session.shippingData.declaredValue}\n` +
       `<b>Описание:</b> ${ctx.session.shippingData.description}\n\n` +
-      
+
       `${EMOJI.CALCULATOR} <b>Расчет стоимости:</b>\n` +
       `Доставка: ${FormatUtils.formatMoney(calculation.shippingCost)}\n` +
       `Таможня: ${FormatUtils.formatMoney(calculation.customsFee || 0)}\n` +
       `Обработка: ${FormatUtils.formatMoney(calculation.processingFee || 0)}\n` +
       `<b>ИТОГО: ${FormatUtils.formatMoney(calculation.totalCost)}</b>\n\n` +
-      
-      `⏱ Срок доставки: ${calculation.deliveryDays}\n\n` +
-      
+
+      `⏱ Срок доставки: ${calculation.deliveryDays} дней\n\n` +
+
       `Создать заказ?`,
       { reply_markup: confirmKeyboard }
     );
@@ -349,20 +424,25 @@ export async function shippingConversation(
     
     // Create order
     try {
+      logger.info(`Creating shipping order for userId: ${ctx.session.userId}, telegramId: ${ctx.from.id}`);
+
       const orderData = {
-        userId: ctx.session.userId,
+        userId: ctx.session.userId!,
         type: OrderType.SHIPPING,
-        warehouseId: ctx.session.shippingData.warehouseId,
-        addressId: ctx.session.shippingData.addressId,
-        weight: ctx.session.shippingData.weight,
+        warehouseId: ctx.session.shippingData.warehouseId!,
+        addressId: ctx.session.shippingData.addressId!,
+        weight: ctx.session.shippingData.weight!,
         length: ctx.session.shippingData.length,
         width: ctx.session.shippingData.width,
         height: ctx.session.shippingData.height,
         declaredValue: ctx.session.shippingData.declaredValue,
         description: ctx.session.shippingData.description,
+        externalTrackNumber: ctx.session.shippingData.externalTrackNumber,
         shippingCost: calculation.shippingCost
       };
-      
+
+      logger.info(`Order data:`, orderData);
+
       const order = await apiClient.createOrder(orderData);
       
       const paymentKeyboard = new InlineKeyboard()
@@ -373,23 +453,17 @@ export async function shippingConversation(
       
       await ctx.reply(
         `${EMOJI.SUCCESS} <b>Заказ создан!</b>\n\n` +
-        
+
         `<b>Номер заказа:</b> ${FormatUtils.formatOrderId(order.id)}\n` +
-        `<b>Трек-номер:</b> <code>${order.trackNumber}</code>\n\n` +
-        
-        `<b>Инструкция по отправке:</b>\n` +
-        `1. Отправьте посылку на адрес склада:\n` +
-        `<code>${warehouse?.address}</code>\n\n` +
-        
-        `2. <b>ОБЯЗАТЕЛЬНО укажите при отправке:</b>\n` +
-        `Получатель: CargoExpress\n` +
-        `ID клиента: <b>#${ctx.session.userId}</b>\n` +
-        `Трек: <b>${order.trackNumber}</b>\n\n` +
-        
-        `3. После отправки сообщите трек-номер транспортной компании\n\n` +
-        
-        `<b>К оплате: ${FormatUtils.formatMoney(calculation.totalCost)}</b>\n\n` +
-        
+        `<b>Ваш трек-номер:</b> <code>${order.trackNumber}</code>\n\n` +
+
+        `✅ Ваша посылка принята в обработку!\n\n` +
+
+        `Мы отслеживаем вашу посылку по трек-номеру <b>${order.trackNumber}</b>.\n` +
+        `Как только она прибудет на наш склад <b>${warehouse?.name}</b>, мы сообщим вам и отправим её по адресу доставки.\n\n` +
+
+        `<b>💰 К оплате: ${FormatUtils.formatMoney(calculation.totalCost)}</b>\n\n` +
+
         `Выберите способ оплаты:`,
         { reply_markup: paymentKeyboard }
       );

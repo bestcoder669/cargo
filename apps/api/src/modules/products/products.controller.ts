@@ -109,13 +109,27 @@ class ProductsController {
   }>, reply: FastifyReply) {
     try {
       const productInfo = await productsService.parseProductUrl(request.body.url);
-      
+
       reply.send({
         success: true,
         data: productInfo
       });
     } catch (error) {
       logger.error('Parse product URL error:', error);
+      throw error;
+    }
+  }
+
+  async getCatalogCountries(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const countries = await productsService.getCatalogCountries();
+
+      reply.send({
+        success: true,
+        data: countries
+      });
+    } catch (error) {
+      logger.error('Get catalog countries error:', error);
       throw error;
     }
   }

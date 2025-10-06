@@ -4,7 +4,7 @@ import { CommandContext } from 'grammy';
 import { MyContext } from '../core/types';
 import { apiClient } from '../core/api/client';
 import { InlineKeyboard } from 'grammy';
-import { EMOJI } from '@cargoexpress/shared';
+import { EMOJI, ORDER_STATUS_LABELS, FormatUtils } from '@cargoexpress/shared';
 import { logger } from '../core/logger';
 
 export async function handleStart(ctx: CommandContext<MyContext>) {
@@ -116,7 +116,7 @@ async function handleTrackOrder(ctx: MyContext, trackNumber: string) {
     await ctx.reply(
       `${EMOJI.PACKAGE} <b>Отслеживание посылки</b>\n\n` +
       `Трек: <code>${trackNumber}</code>\n` +
-      `Статус: ${ORDER_STATUS_LABELS[order.status]}\n` +
+      `Статус: ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}\n` +
       `Обновлено: ${FormatUtils.formatDate(order.updatedAt)}\n\n` +
       `Для получения детальной информации войдите в систему.`
     );

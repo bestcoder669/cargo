@@ -30,12 +30,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "moduleResolution": "node",
-    "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@cargoexpress/prisma": ["libs/prisma/src"],
-      "@cargoexpress/shared": ["libs/shared/src"]
-    }
+    "types": ["node"]
   },
   "exclude": ["node_modules", "dist", "build", "coverage", "*.config.js", "*.config.ts"]
 }

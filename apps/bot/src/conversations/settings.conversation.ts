@@ -1,13 +1,14 @@
 // ==================== apps/bot/src/conversations/settings.conversation.ts ====================
 
-import { MyContext, MyConversation } from '../core/types';
+import { Conversation } from '@grammyjs/conversations';
+import { MyContext } from '../core/types';
 import { apiClient } from '../core/api/client';
 import { InlineKeyboard } from 'grammy';
-import { EMOJI } from '@cargoexpress/shared';
+import { EMOJI, ValidationUtils } from '@cargoexpress/shared';
 import { logger } from '../core/logger';
 
 export async function settingsConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   try {
@@ -59,7 +60,7 @@ export async function settingsConversation(
   }
 }
 
-async function changeLanguage(conversation: MyConversation, ctx: MyContext) {
+async function changeLanguage(conversation: Conversation<MyContext>, ctx: MyContext) {
   const langKeyboard = new InlineKeyboard()
     .text('🇷🇺 Русский', 'lang_ru')
     .text('🇬🇧 English', 'lang_en').row()
@@ -88,7 +89,7 @@ async function changeLanguage(conversation: MyConversation, ctx: MyContext) {
   await ctx.reply(`✅ Язык изменен на ${language}`);
 }
 
-async function changeNotifications(conversation: MyConversation, ctx: MyContext) {
+async function changeNotifications(conversation: Conversation<MyContext>, ctx: MyContext) {
   const notifKeyboard = new InlineKeyboard()
     .text('✅ Все уведомления', 'notif_all').row()
     .text('📦 Только заказы', 'notif_orders').row()
@@ -118,37 +119,39 @@ async function changeNotifications(conversation: MyConversation, ctx: MyContext)
   await ctx.reply('✅ Настройки уведомлений обновлены');
 }
 
-async function changeEmail(conversation: MyConversation, ctx: MyContext) {
+async function changeEmail(conversation: Conversation<MyContext>, ctx: MyContext) {
   await ctx.reply('📧 Введите новый email:');
-  
-  const email = await conversation.form.text();
-  
+
+  const emailCtx = await conversation.wait();
+  const email = emailCtx.message?.text || '';
+
   if (!ValidationUtils.isValidEmail(email)) {
     await ctx.reply(`${EMOJI.ERROR} Неверный формат email`);
     return;
   }
-  
+
   await apiClient.updateUser(ctx.session.userId!, { email });
-  
+
   await ctx.reply(`✅ Email изменен на ${email}`);
 }
 
-async function changePhone(conversation: MyConversation, ctx: MyContext) {
+async function changePhone(conversation: Conversation<MyContext>, ctx: MyContext) {
   await ctx.reply('📱 Введите новый номер телефона:');
-  
-  const phone = await conversation.form.text();
-  
+
+  const phoneCtx = await conversation.wait();
+  const phone = phoneCtx.message?.text || '';
+
   if (!ValidationUtils.isValidPhone(phone)) {
     await ctx.reply(`${EMOJI.ERROR} Неверный формат телефона`);
     return;
   }
-  
+
   await apiClient.updateUser(ctx.session.userId!, { phone });
-  
+
   await ctx.reply(`✅ Телефон изменен на ${phone}`);
 }
 
-async function deleteAccount(conversation: MyConversation, ctx: MyContext) {
+async function deleteAccount(conversation: Conversation<MyContext>, ctx: MyContext) {
   const confirmKeyboard = new InlineKeyboard()
     .text('⚠️ Да, удалить', 'confirm_delete')
     .text('❌ Отмена', 'cancel');
@@ -174,9 +177,10 @@ async function deleteAccount(conversation: MyConversation, ctx: MyContext) {
   
   // Final confirmation
   await ctx.reply('Для подтверждения введите: УДАЛИТЬ');
-  
-  const confirmation = await conversation.form.text();
-  
+
+  const confirmationCtx = await conversation.wait();
+  const confirmation = confirmationCtx.message?.text || '';
+
   if (confirmation !== 'УДАЛИТЬ') {
     await ctx.reply('Удаление отменено');
     return;

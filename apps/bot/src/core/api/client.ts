@@ -92,7 +92,12 @@ class ApiClient {
     });
     return response.data.data || [];
   }
-  
+
+  async getCatalogCountries(): Promise<any[]> {
+    const response = await this.client.get<ApiResponse>('/products/catalog/countries');
+    return response.data.data || [];
+  }
+
   async getProducts(params: {
     categoryId?: number;
     countryId?: number;
@@ -126,17 +131,35 @@ class ApiClient {
     const response = await this.client.get<ApiResponse>(`/orders/${orderId}`);
     return response.data.data;
   }
-  
+
+  async getOrders(params?: any): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/orders', { params });
+    return response.data;
+  }
+
+  async updateOrder(orderId: number, data: any, adminId?: number): Promise<any> {
+    const response = await this.client.patch<ApiResponse>(`/orders/${orderId}`, {
+      ...data,
+      updatedBy: adminId
+    });
+    return response.data.data;
+  }
+
   async getOrderByTrackNumber(trackNumber: string): Promise<any> {
     const response = await this.client.get<ApiResponse>(`/orders/track/${trackNumber}`);
     return response.data.data;
   }
-  
+
   async cancelOrder(orderId: number, reason?: string): Promise<any> {
-    const response = await this.client.post<ApiResponse>(`/orders/${orderId}/cancel`, { reason });
+    const response = await this.client.post<ApiResponse>(`/admin/orders/${orderId}/cancel`, { reason });
     return response.data.data;
   }
-  
+
+  async sendMessageToUser(userId: number, message: string): Promise<any> {
+    const response = await this.client.post<ApiResponse>(`/admin/users/${userId}/message`, { message });
+    return response.data.data;
+  }
+
   // ========== Calculator ==========
   
   async calculateShipping(params: {
@@ -186,15 +209,29 @@ class ApiClient {
   async deleteAddress(addressId: number): Promise<void> {
     await this.client.delete(`/addresses/${addressId}`);
   }
-  
+
+  async deleteUser(userId: number): Promise<void> {
+    await this.client.delete(`/users/${userId}`);
+  }
+
+  async updateUserSettings(userId: number, settings: any): Promise<any> {
+    const response = await this.client.patch<ApiResponse>(`/users/${userId}/settings`, settings);
+    return response.data.data;
+  }
+
   // ========== Support ==========
-  
+
   async createSupportChat(userId: number, message: string, subject?: string): Promise<any> {
     const response = await this.client.post<ApiResponse>('/support/chats', {
       userId,
       initialMessage: message,
       subject
     });
+    return response.data.data;
+  }
+
+  async rateSupportChat(chatId: number, rating: number): Promise<any> {
+    const response = await this.client.post<ApiResponse>(`/support/chats/${chatId}/rate`, { rating });
     return response.data.data;
   }
   
@@ -216,7 +253,22 @@ class ApiClient {
     const response = await this.client.get<ApiResponse>(`/support/chats/${chatId}`);
     return response.data.data;
   }
-  
+
+  async getSupportChats(params?: any): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/support/chats', { params });
+    return response.data;
+  }
+
+  async updateSupportChat(chatId: number, data: any): Promise<any> {
+    const response = await this.client.patch<ApiResponse>(`/support/chats/${chatId}`, data);
+    return response.data.data;
+  }
+
+  async closeSupportChat(chatId: number): Promise<any> {
+    const response = await this.client.post<ApiResponse>(`/support/chats/${chatId}/close`, {});
+    return response.data.data;
+  }
+
   // ========== Payments ==========
   
   async createPayment(orderId: number, method: string): Promise<any> {
@@ -275,7 +327,131 @@ class ApiClient {
   async logAdminAction(action: any): Promise<void> {
     await this.client.post('/admin/actions', action);
   }
-  
+
+  async startScannerSession(data: any): Promise<any> {
+    const response = await this.client.post<ApiResponse>('/admin/scanner/session/start', data);
+    return response.data.data;
+  }
+
+  async endScannerSession(sessionId: string): Promise<void> {
+    await this.client.post(`/admin/scanner/session/${sessionId}/end`, {});
+  }
+
+  async scanOrder(data: any): Promise<any> {
+    const response = await this.client.post<ApiResponse>('/admin/scanner/scan', data);
+    return response.data.data;
+  }
+
+  async getUsersCount(params: any): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/users/count', { params });
+    return response.data.data;
+  }
+
+  async sendBroadcast(data: any): Promise<any> {
+    const response = await this.client.post<ApiResponse>('/admin/broadcast', data);
+    return response.data.data;
+  }
+
+  async searchUsers(params: any): Promise<any[]> {
+    const response = await this.client.get<ApiResponse>('/admin/users/search', { params });
+    return response.data.data || [];
+  }
+
+  async updateUserBalance(data: any): Promise<any> {
+    const response = await this.client.post<ApiResponse>('/admin/users/balance', data);
+    return response.data.data;
+  }
+
+  async getUsers(params?: any): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/users', { params });
+    return response.data;
+  }
+
+  async getScannerSessions(params?: any): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/scanner/sessions', { params });
+    return response.data;
+  }
+
+  async getFinanceStats(): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/finance/stats');
+    return response.data.data;
+  }
+
+  async getTopUsers(params?: any): Promise<any[]> {
+    const response = await this.client.get<ApiResponse>('/admin/users/top', { params });
+    return response.data.data || [];
+  }
+
+  async getUsersStats(): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/users/stats');
+    return response.data.data;
+  }
+
+  async getUserStats(userId: number): Promise<any> {
+    const response = await this.client.get<ApiResponse>(`/admin/users/${userId}/stats`);
+    return response.data.data;
+  }
+
+  async getUserHistory(userId: number, params?: any): Promise<any[]> {
+    const response = await this.client.get<ApiResponse>(`/admin/users/${userId}/history`, { params });
+    return response.data.data || [];
+  }
+
+  async getOrderPhotos(orderId: number): Promise<any[]> {
+    const response = await this.client.get<ApiResponse>(`/admin/orders/${orderId}/photos`);
+    return response.data.data || [];
+  }
+
+  async getOrderHistory(orderId: number): Promise<any[]> {
+    const response = await this.client.get<ApiResponse>(`/admin/orders/${orderId}/history`);
+    return response.data.data || [];
+  }
+
+  async findOrderByTrack(trackNumber: string): Promise<any> {
+    const response = await this.client.get<ApiResponse>(`/admin/orders/track/${trackNumber}`);
+    return response.data.data;
+  }
+
+  async getRecentPayments(params?: any): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/finance/payments', { params });
+    return response.data;
+  }
+
+  async getBalancesSummary(): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/finance/balances');
+    return response.data.data;
+  }
+
+  async getWithdrawals(params?: any): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/finance/withdrawals', { params });
+    return response.data;
+  }
+
+  async exportStats(): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/stats/export');
+    return response.data.data;
+  }
+
+  async getScannerStats(): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/scanner/stats');
+    return response.data.data;
+  }
+
+  async getScannerSession(sessionId: number): Promise<any> {
+    const response = await this.client.get<ApiResponse>(`/admin/scanner/sessions/${sessionId}`);
+    return response.data.data;
+  }
+
+  async getSupportStats(): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/support/stats');
+    return response.data.data;
+  }
+
+  async getSystemInfo(): Promise<any> {
+    const response = await this.client.get<ApiResponse>('/admin/system');
+    return response.data.data;
+  }
+
   // ========== Bot Specific ==========
   
   async getKeyboardData(type: string, params?: any): Promise<KeyboardData> {

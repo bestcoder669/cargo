@@ -9,6 +9,15 @@ import { purchaseConversation } from '../modules/purchase/purchase.conversation'
 import { supportConversation } from '../modules/support/support.conversation';
 import { calculatorConversation } from './calculator.conversation';
 import { settingsConversation } from './settings.conversation';
+import {
+  addAddressConversation,
+  editAddressConversation,
+  depositConversation,
+  editNameConversation,
+  editPhoneConversation,
+  editEmailConversation,
+  editCityConversation
+} from '../modules/profile/profile.conversation';
 
 export function registerConversations(bot: Bot<MyContext>) {
   // User conversations
@@ -18,4 +27,13 @@ export function registerConversations(bot: Bot<MyContext>) {
   bot.use(createConversation(supportConversation, 'support'));
   bot.use(createConversation(calculatorConversation, 'calculator'));
   bot.use(createConversation(settingsConversation, 'settings'));
+
+  // Profile conversations
+  bot.use(createConversation(addAddressConversation, 'addAddress'));
+  bot.use(createConversation(editAddressConversation, 'editAddress'));
+  bot.use(createConversation(depositConversation, 'deposit'));
+  bot.use(createConversation(editNameConversation, 'editName'));
+  bot.use(createConversation(editPhoneConversation, 'editPhone'));
+  bot.use(createConversation(editEmailConversation, 'editEmail'));
+  bot.use(createConversation(editCityConversation, 'editCity'));
 }

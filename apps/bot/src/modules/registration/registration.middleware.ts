@@ -26,10 +26,7 @@ export async function checkRegistration(ctx: MyContext, next: NextFunction) {
       } else {
         // User not registered
         if (ctx.callbackQuery) {
-          await ctx.answerCallbackQuery(
-            'Сначала нужно зарегистрироваться!',
-            { show_alert: true }
-          );
+          await ctx.answerCallbackQuery({ text: 'Сначала нужно зарегистрироваться!', show_alert: true });
         }
         
         await ctx.reply(

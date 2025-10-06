@@ -11,7 +11,7 @@ import {
   ConfirmScanDto
 } from '@cargoexpress/shared';
 import { logger } from '../../core/logger';
-import { notificationService } from '../notifications/notification.service';
+import { notificationService } from '../notifications/notifications.service';
 
 class ScannerService {
   private sessions = new Map<string, ScannerSession>();
@@ -362,20 +362,26 @@ class ScannerService {
         }
       });
       
-      // Log admin action
-      await tx.adminAction.create({
-        data: {
-          adminId,
-          action: 'ORDER_STATUS_CHANGED',
-          entityType: 'order',
-          entityId: orderId.toString(),
-          details: {
-            oldStatus,
-            newStatus,
-            method: 'scanner'
-          }
+      // Log admin action (skip if adminId is invalid/Telegram ID)
+      if (adminId && adminId < 1000000) {
+        try {
+          await tx.adminAction.create({
+            data: {
+              adminId,
+              action: 'ORDER_STATUS_CHANGED',
+              entityType: 'order',
+              entityId: orderId.toString(),
+              details: {
+                oldStatus,
+                newStatus,
+                method: 'scanner'
+              }
+            }
+          });
+        } catch (error) {
+          logger.warn('Failed to log admin action:', error);
         }
-      });
+      }
     });
   }
   
@@ -488,21 +494,30 @@ class ScannerService {
   }
   
   async getSessions(filters: any) {
+    const adminId = filters.adminId ? parseInt(filters.adminId) : undefined;
+    const limit = parseInt(filters.limit) || 20;
+    const offset = parseInt(filters.offset) || 0;
+
+    const where: any = {};
+    if (adminId) {
+      where.adminId = adminId;
+    }
+    if (filters.active !== undefined) {
+      where.endedAt = filters.active ? null : { not: null };
+    }
+
     const sessions = await prisma.scannerSession.findMany({
-      where: {
-        adminId: filters.adminId,
-        endedAt: filters.active ? null : { not: null }
-      },
+      where,
       orderBy: { startedAt: 'desc' },
-      take: filters.limit || 20,
-      skip: filters.offset || 0,
+      take: limit,
+      skip: offset,
       include: {
         _count: {
           select: { logs: true }
         }
       }
     });
-    
+
     return sessions;
   }
   

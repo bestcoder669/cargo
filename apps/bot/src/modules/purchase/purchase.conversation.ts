@@ -1,10 +1,11 @@
 
 // ==================== apps/bot/src/modules/purchase/purchase.conversation.ts ====================
 
-import { MyContext, MyConversation } from '../../core/types';
+import { Conversation } from '@grammyjs/conversations';
+import { MyContext } from '../../core/types';
 import { apiClient } from '../../core/api/client';
 import { InlineKeyboard } from 'grammy';
-import { 
+import {
   EMOJI,
   OrderType,
   FormatUtils,
@@ -13,7 +14,7 @@ import {
 import { logger } from '../../core/logger';
 
 export async function purchaseConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   try {
@@ -62,7 +63,7 @@ export async function purchaseConversation(
 }
 
 async function purchaseLinkFlow(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext,
   messageId: number
 ) {
@@ -75,8 +76,9 @@ async function purchaseLinkFlow(
     `<i>Поддерживаются сайты: Amazon, eBay, AliExpress, Taobao и другие</i>`,
     { parse_mode: 'HTML' }
   );
-  
-  const urlText = await conversation.form.text();
+
+  const urlCtx = await conversation.wait();
+  const urlText = urlCtx.message?.text || '';
   
   if (!ValidationUtils.isValidUrl(urlText)) {
     await ctx.reply(
@@ -99,17 +101,19 @@ async function purchaseLinkFlow(
     `${EMOJI.PACKAGE} <b>Название товара</b>\n\n` +
     `<b>Шаг 2/7:</b> Введите название товара:`
   );
-  
-  const productName = await conversation.form.text();
+
+  const nameCtx = await conversation.wait();
+  const productName = nameCtx.message?.text || '';
   ctx.session.purchaseData!.productName = productName;
-  
+
   // Step 3: Quantity
   await ctx.reply(
     `${EMOJI.PACKAGE} <b>Количество</b>\n\n` +
     `<b>Шаг 3/7:</b> Сколько штук заказать?`
   );
-  
-  const quantityText = await conversation.form.text();
+
+  const quantityCtx = await conversation.wait();
+  const quantityText = quantityCtx.message?.text || '0';
   const quantity = parseInt(quantityText);
   
   if (isNaN(quantity) || quantity <= 0 || quantity > 100) {
@@ -138,27 +142,29 @@ async function purchaseLinkFlow(
   
   if (sizeCtx.callbackQuery.data === 'size_yes') {
     await ctx.reply('Введите размер (S, M, L, XL, 42, 44 и т.д.):');
-    const size = await conversation.form.text();
+    const sizeInputCtx = await conversation.wait();
+    const size = sizeInputCtx.message?.text || '';
     ctx.session.purchaseData!.productSize = size;
   }
-  
+
   // Step 5: Color (optional)
   const colorKeyboard = new InlineKeyboard()
     .text('Указать цвет', 'color_yes')
     .text('Пропустить', 'color_no');
-  
+
   await ctx.reply(
     `${EMOJI.PACKAGE} <b>Цвет</b>\n\n` +
     `<b>Шаг 5/7:</b> Нужно указать цвет?`,
     { reply_markup: colorKeyboard }
   );
-  
+
   const colorCtx = await conversation.waitForCallbackQuery(/^color_/);
   await colorCtx.answerCallbackQuery();
-  
+
   if (colorCtx.callbackQuery.data === 'color_yes') {
     await ctx.reply('Введите цвет:');
-    const color = await conversation.form.text();
+    const colorInputCtx = await conversation.wait();
+    const color = colorInputCtx.message?.text || '';
     ctx.session.purchaseData!.productColor = color;
   }
   
@@ -168,25 +174,27 @@ async function purchaseLinkFlow(
     `<b>Шаг 6/7:</b> Введите стоимость товара в долларах:\n` +
     `<i>Цена за ${quantity} шт.</i>`
   );
-  
-  const costText = await conversation.form.text();
+
+  const costCtx = await conversation.wait();
+  const costText = costCtx.message?.text || '0';
   const cost = parseFloat(costText);
-  
+
   if (isNaN(cost) || cost <= 0) {
     await ctx.reply(`${EMOJI.ERROR} Неверная стоимость`);
     return purchaseLinkFlow(conversation, ctx, messageId);
   }
-  
+
   ctx.session.purchaseData!.purchaseCost = cost;
-  
+
   // Step 7: Additional notes
   await ctx.reply(
     `${EMOJI.PACKAGE} <b>Дополнительная информация</b>\n\n` +
     `<b>Шаг 7/7:</b> Есть особые пожелания?\n` +
     `<i>Или отправьте "-" чтобы пропустить</i>`
   );
-  
-  const note = await conversation.form.text();
+
+  const noteCtx = await conversation.wait();
+  const note = noteCtx.message?.text || '';
   if (note !== '-') {
     ctx.session.purchaseData!.productNote = note;
   }
@@ -262,19 +270,47 @@ async function purchaseLinkFlow(
     return;
   }
   
+  // Get warehouse and address
+  const warehouses = await apiClient.getWarehouses(countryId);
+  const warehouse = warehouses[0];
+
+  if (!warehouse) {
+    await ctx.reply(`${EMOJI.ERROR} Нет доступных складов для этой страны.`);
+    return;
+  }
+
+  const addresses = await apiClient.getUserAddresses(ctx.session.userId!);
+  let addressId: number;
+
+  if (addresses.length > 0) {
+    addressId = addresses[0].id;
+  } else {
+    const user = await apiClient.getUserProfile(ctx.session.userId!);
+    const newAddress = await apiClient.createAddress(ctx.session.userId!, {
+      name: 'Основной',
+      address: user.addresses[0]?.address || '',
+      cityId: user.cityId,
+      isDefault: true
+    });
+    addressId = newAddress.id;
+  }
+
   // Create order
   try {
     const orderData = {
-      userId: ctx.session.userId,
+      userId: ctx.session.userId!,
       type: OrderType.PURCHASE,
-      countryId: ctx.session.purchaseData!.countryId,
+      warehouseId: warehouse.id,
+      addressId,
       productUrl: ctx.session.purchaseData!.productUrl,
       productName: ctx.session.purchaseData!.productName,
       productQuantity: ctx.session.purchaseData!.productQuantity,
       productSize: ctx.session.purchaseData!.productSize,
       productColor: ctx.session.purchaseData!.productColor,
       productNote: ctx.session.purchaseData!.productNote,
-      purchaseCost: ctx.session.purchaseData!.purchaseCost
+      purchaseCost: ctx.session.purchaseData!.purchaseCost,
+      commissionAmount: calculation.commission,
+      totalAmount: calculation.totalCost
     };
     
     const order = await apiClient.createOrder(orderData);
@@ -318,16 +354,13 @@ async function purchaseLinkFlow(
 }
 
 async function purchaseCatalogFlow(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext,
   messageId: number
 ) {
   // Select country
-  const countries = await apiClient.getCountries(true);
-  const catalogCountries = countries.filter(c => 
-    c.purchaseAvailable && c.products?.length > 0
-  );
-  
+  const catalogCountries = await apiClient.getCatalogCountries();
+
   if (catalogCountries.length === 0) {
     await ctx.reply(
       `${EMOJI.ERROR} Каталог товаров временно недоступен.\n` +
@@ -338,7 +371,7 @@ async function purchaseCatalogFlow(
   
   const countryKeyboard = new InlineKeyboard();
   catalogCountries.forEach((country, index) => {
-    const text = `${country.flagEmoji} ${country.name}`;
+    const text = `${country.flagEmoji} ${country.name} (${country.productsCount})`;
     countryKeyboard.text(text, `catalog_country_${country.id}`);
     if ((index + 1) % 2 === 0) {
       countryKeyboard.row();
@@ -387,60 +420,222 @@ async function purchaseCatalogFlow(
   const categoryId = parseInt(categoryCtx.callbackQuery.data.replace('catalog_cat_', ''));
   
   // Get products
-  const products = await apiClient.getProducts({
+  const productsResponse = await apiClient.getProducts({
     countryId,
     categoryId,
     limit: 10
   });
-  
-  if (!products.items || products.items.length === 0) {
+
+  const products = productsResponse?.items || [];
+
+  if (products.length === 0) {
     await ctx.reply(
       `${EMOJI.ERROR} В этой категории пока нет товаров.\n` +
       `Попробуйте другую категорию или закажите по ссылке.`
     );
     return;
   }
-  
+
   // Show products carousel
-  for (const product of products.items) {
+  let currentProductIndex = 0;
+  let selectedProduct = null;
+  let lastProductMsgId: number | null = null;
+
+  while (!selectedProduct && currentProductIndex < products.length) {
+    const product = products[currentProductIndex];
+
     const productKeyboard = new InlineKeyboard()
-      .text('🛒 Заказать', `order_product_${product.id}`)
-      .text('ℹ️ Подробнее', `info_product_${product.id}`).row()
-      .text('➡️ Следующий', 'next_product');
-    
-    await ctx.reply(
-      `${product.imageUrl ? `<a href="${product.imageUrl}">​</a>` : ''}`  +
+      .text('🛒 Заказать', `order_product_${product.id}`);
+
+    if (currentProductIndex < products.length - 1) {
+      productKeyboard.text('➡️ Следующий', 'next_product');
+    }
+
+    const productMsg = await ctx.reply(
+      `${product.imageUrl ? `<a href="${product.imageUrl}">​</a>` : ''}` +
       `<b>${product.name}</b>\n\n` +
-      `💰 <b>Цена:</b> ${FormatUtils.formatMoney(product.price * 90)}\n` +
-      (product.oldPrice ? `<s>${FormatUtils.formatMoney(product.oldPrice * 90)}</s>\n` : '') +
-      `⭐ <b>Рейтинг:</b> ${product.rating}/5 (${product.reviewCount} отзывов)\n` +
+      `💰 <b>Цена:</b> ${FormatUtils.formatMoney(Number(product.price) * 90)}\n` +
+      (product.oldPrice ? `<s>${FormatUtils.formatMoney(Number(product.oldPrice) * 90)}</s>\n` : '') +
+      (product.rating ? `⭐ <b>Рейтинг:</b> ${product.rating}/5 (${product.reviewCount} отзывов)\n` : '') +
       `📦 <b>Продано:</b> ${product.soldCount} шт.\n\n` +
-      `${product.description?.substring(0, 200)}...`,
-      { 
+      `${product.description?.substring(0, 200) || 'Нет описания'}...`,
+      {
         reply_markup: productKeyboard,
         parse_mode: 'HTML'
       }
     );
-    
-    const productCtx = await conversation.waitForCallbackQuery();
+
+    const productCtx = await conversation.waitForCallbackQuery(/^(order_product_|next_product)/);
     await productCtx.answerCallbackQuery();
-    
+
     if (productCtx.callbackQuery.data.startsWith('order_product_')) {
-      const productId = parseInt(productCtx.callbackQuery.data.replace('order_product_', ''));
-      const selectedProduct = products.items.find(p => p.id === productId);
-      
-      ctx.session.purchaseData = {
-        type: 'catalog',
-        productId,
-        productName: selectedProduct.name,
-        purchaseCost: selectedProduct.price,
-        countryId,
-        productQuantity: 1
-      };
-      
-      // Continue with order creation...
-      // Similar to link flow
+      selectedProduct = product;
       break;
+    } else if (productCtx.callbackQuery.data === 'next_product') {
+      // Delete the previous product message to avoid clutter
+      if (lastProductMsgId) {
+        await ctx.api.deleteMessage(ctx.chat!.id, lastProductMsgId).catch(() => {});
+      }
+      await ctx.api.deleteMessage(ctx.chat!.id, productMsg.message_id).catch(() => {});
+
+      currentProductIndex++;
     }
+
+    lastProductMsgId = productMsg.message_id;
+  }
+
+  if (!selectedProduct) {
+    await ctx.reply(
+      `${EMOJI.INFO} Вы просмотрели все товары.\n` +
+      `Попробуйте другую категорию или закажите по ссылке.`
+    );
+    return;
+  }
+
+  // Collect purchase details
+  const qtyMsg = await ctx.reply(`📦 <b>Заказ: ${selectedProduct.name}</b>\n\nСколько штук вы хотите заказать?`, { parse_mode: 'HTML' });
+
+  let quantity = 0;
+  let qtyAttempts = 0;
+
+  while (qtyAttempts < 3) {
+    const qtyCtx = await conversation.wait();
+    quantity = parseInt(qtyCtx.message?.text || '0');
+
+    if (isNaN(quantity) || quantity < 1 || quantity > 100) {
+      qtyAttempts++;
+      const errorMsg = await ctx.reply(`${EMOJI.ERROR} Неверное количество. Укажите от 1 до 100.`);
+
+      if (qtyAttempts >= 3) {
+        await ctx.reply('❌ Слишком много попыток. Начните заново: /purchase');
+        return;
+      }
+
+      // Delete error message after 3 seconds
+      setTimeout(() => {
+        ctx.api.deleteMessage(ctx.chat!.id, errorMsg.message_id).catch(() => {});
+      }, 3000);
+
+      continue;
+    }
+
+    // Delete the quantity message prompt
+    await ctx.api.deleteMessage(ctx.chat!.id, qtyMsg.message_id).catch(() => {});
+    break;
+  }
+
+  // Get warehouse from country
+  const warehouses = await apiClient.getWarehouses(countryId);
+  const warehouse = warehouses[0];
+
+  if (!warehouse) {
+    await ctx.reply(`${EMOJI.ERROR} Нет доступных складов для этой страны.`);
+    return;
+  }
+
+  // Get delivery address
+  const addresses = await apiClient.getUserAddresses(ctx.session.userId!);
+  let addressId: number;
+
+  if (addresses.length > 0) {
+    const addressKeyboard = new InlineKeyboard();
+    addresses.forEach((addr) => {
+      addressKeyboard.text(`${addr.name} (${addr.cityName})`, `addr_${addr.id}`).row();
+    });
+    addressKeyboard.text('➕ Новый адрес', 'addr_new');
+
+    const addrMsg = await ctx.reply('Выберите адрес доставки:', { reply_markup: addressKeyboard });
+
+    const addrCtx = await conversation.waitForCallbackQuery(/^addr_/);
+    await addrCtx.answerCallbackQuery();
+
+    // Delete address selection message
+    await ctx.api.deleteMessage(ctx.chat!.id, addrMsg.message_id).catch(() => {});
+
+    if (addrCtx.callbackQuery.data === 'addr_new') {
+      const nameMsg = await ctx.reply('Введите название адреса (Дом, Офис и т.д.):');
+      const nameCtx = await conversation.wait();
+      const name = nameCtx.message?.text || 'Адрес';
+
+      // Delete name prompt
+      await ctx.api.deleteMessage(ctx.chat!.id, nameMsg.message_id).catch(() => {});
+
+      const addressMsg = await ctx.reply('Введите полный адрес:');
+      const addressCtx = await conversation.wait();
+      const address = addressCtx.message?.text || '';
+
+      // Delete address prompt
+      await ctx.api.deleteMessage(ctx.chat!.id, addressMsg.message_id).catch(() => {});
+
+      const newAddress = await apiClient.createAddress(ctx.session.userId!, {
+        name,
+        address,
+        cityId: ctx.user.cityId
+      });
+
+      addressId = newAddress.id;
+    } else {
+      addressId = parseInt(addrCtx.callbackQuery.data.replace('addr_', ''));
+    }
+  } else {
+    const user = await apiClient.getUserProfile(ctx.session.userId!);
+    const newAddress = await apiClient.createAddress(ctx.session.userId!, {
+      name: 'Основной',
+      address: user.addresses[0]?.address || '',
+      cityId: user.cityId,
+      isDefault: true
+    });
+    addressId = newAddress.id;
+  }
+
+  // Calculate totals
+  const purchaseCost = Number(selectedProduct.price) * quantity;
+  const commissionAmount = purchaseCost * 0.1; // 10% commission
+  const totalAmount = purchaseCost + commissionAmount;
+
+  // Create purchase order
+  try {
+    const orderData = {
+      userId: ctx.session.userId!,
+      type: OrderType.PURCHASE,
+      warehouseId: warehouse.id,
+      addressId,
+      productUrl: selectedProduct.url,
+      productName: selectedProduct.name,
+      productQuantity: quantity,
+      purchaseCost,
+      commissionAmount,
+      totalAmount
+    };
+
+    const order = await apiClient.createOrder(orderData);
+
+    const paymentKeyboard = new InlineKeyboard()
+      .text('💳 Оплатить картой', `pay_card_${order.id}`)
+      .text('🪙 Оплатить криптой', `pay_crypto_${order.id}`).row()
+      .text('💰 Оплатить с баланса', `pay_balance_${order.id}`).row()
+      .text('📦 Мои заказы', 'my_orders');
+
+    await ctx.reply(
+      `${EMOJI.SUCCESS} <b>Заказ создан!</b>\n\n` +
+      `<b>Номер заказа:</b> ${FormatUtils.formatOrderId(order.id)}\n` +
+      `<b>Товар:</b> ${selectedProduct.name}\n` +
+      `<b>Количество:</b> ${quantity} шт.\n\n` +
+      `💰 <b>Стоимость товара:</b> ${FormatUtils.formatMoney(purchaseCost)}\n` +
+      `📊 <b>Комиссия (10%):</b> ${FormatUtils.formatMoney(commissionAmount)}\n` +
+      `<b>Итого к оплате: ${FormatUtils.formatMoney(totalAmount)}</b>\n\n` +
+      `Мы выкупим товар и отправим его на ваш адрес.\n\n` +
+      `Выберите способ оплаты:`,
+      { reply_markup: paymentKeyboard, parse_mode: 'HTML' }
+    );
+
+    ctx.session.purchaseData = undefined;
+
+  } catch (error) {
+    logger.error('Failed to create purchase order:', error);
+    await ctx.reply(
+      `${EMOJI.ERROR} Не удалось создать заказ.\n` +
+      `Попробуйте позже или обратитесь в поддержку.`
+    );
   }
 }

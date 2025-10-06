@@ -1,17 +1,23 @@
 // ==================== apps/bot/src/handlers/callback.handler.ts ====================
 
-import { Bot } from 'grammy';
+import { Bot, InlineKeyboard } from 'grammy';
 import { MyContext } from '../core/types';
-import { 
+import {
   handleProfile,
   handleMyOrders,
   handleOrderDetails,
   handleMyAddresses,
-  handleBalance
+  handleBalance,
+  handleMyStats,
+  handleReferral,
+  handleSettings,
+  handleTransactions,
+  handleUseBonus
 } from '../modules/profile/profile.handler';
 import { handleAdminToken, handleAdminStats } from '../modules/admin/admin.handler';
 import { EMOJI } from '@cargoexpress/shared';
 import { logger } from '../core/logger';
+import { apiClient } from '../core/api/client';
 
 export function handleCallbackQueries(bot: Bot<MyContext>) {
   // Navigation
@@ -77,7 +83,252 @@ export function handleCallbackQueries(bot: Bot<MyContext>) {
     await ctx.answerCallbackQuery();
     await handleBalance(ctx);
   });
-  
+
+  bot.callbackQuery('my_stats', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await handleMyStats(ctx);
+  });
+
+  bot.callbackQuery('referral', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await handleReferral(ctx);
+  });
+
+  bot.callbackQuery('settings', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await handleSettings(ctx);
+  });
+
+  bot.callbackQuery('transactions', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await handleTransactions(ctx);
+  });
+
+  bot.callbackQuery('use_bonus', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await handleUseBonus(ctx);
+  });
+
+  bot.callbackQuery('add_address', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.enter('addAddress');
+  });
+
+  bot.callbackQuery(/^edit_address_(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    ctx.session.tempData = { addressId: parseInt(ctx.match[1]) };
+    await ctx.conversation.enter('editAddress');
+  });
+
+  bot.callbackQuery('deposit', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.enter('deposit');
+  });
+
+  // Referral actions
+  bot.callbackQuery('share_referral', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await apiClient.getUserProfile(ctx.session.userId!);
+    const botUsername = (await ctx.api.getMe()).username;
+    const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
+
+    await ctx.reply(
+      `📤 <b>Поделитесь вашей реферальной ссылкой:</b>\n\n` +
+      `${referralLink}\n\n` +
+      `Скопируйте и отправьте друзьям!`,
+      {
+        reply_markup: new InlineKeyboard()
+          .url('📤 Поделиться в Telegram', `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Присоединяйся к CargoExpress! Получи 500₽ бонусов на первый заказ 🎁')}`)
+          .row()
+          .text('⬅️ Назад', 'referral')
+      }
+    );
+  });
+
+  bot.callbackQuery('my_referrals', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    try {
+      const user = await apiClient.getUserProfile(ctx.session.userId!);
+      // Mock referrals data
+      const referrals = [
+        { firstName: 'Иван', ordersCount: 3, earnings: 450 },
+        { firstName: 'Мария', ordersCount: 1, earnings: 150 },
+      ];
+
+      let message = `👥 <b>Мои рефералы</b>\n\n`;
+
+      if (referrals.length === 0) {
+        message += `У вас пока нет рефералов.\n\nПригласите друзей и получайте 5% с их заказов!`;
+      } else {
+        message += `<b>Всего рефералов:</b> ${referrals.length}\n\n`;
+        referrals.forEach((ref, index) => {
+          message += `${index + 1}. ${ref.firstName}\n`;
+          message += `   Заказов: ${ref.ordersCount} | Заработано: ${ref.earnings}₽\n\n`;
+        });
+      }
+
+      await ctx.reply(message, {
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', 'referral')
+      });
+    } catch (error) {
+      await ctx.reply('❌ Не удалось загрузить список рефералов');
+    }
+  });
+
+  // Settings actions
+  bot.callbackQuery('edit_name', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.enter('editName');
+  });
+
+  bot.callbackQuery('edit_phone', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.enter('editPhone');
+  });
+
+  bot.callbackQuery('edit_email', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.enter('editEmail');
+  });
+
+  bot.callbackQuery('edit_city', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.enter('editCity');
+  });
+
+  bot.callbackQuery('notifications_settings', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await apiClient.getUserProfile(ctx.session.userId!);
+    const notificationsEnabled = user.settings?.notifications !== false;
+
+    const keyboard = new InlineKeyboard()
+      .text(notificationsEnabled ? '🔕 Выключить' : '🔔 Включить', 'toggle_notifications')
+      .row()
+      .text('⬅️ Назад', 'settings');
+
+    await ctx.reply(
+      `🔔 <b>Настройки уведомлений</b>\n\n` +
+      `Статус: ${notificationsEnabled ? '✅ Включены' : '❌ Выключены'}\n\n` +
+      `<b>Вы будете получать уведомления о:</b>\n` +
+      `• Изменении статуса заказа\n` +
+      `• Поступлении посылки на склад\n` +
+      `• Новых сообщениях в поддержке\n` +
+      `• Акциях и специальных предложениях`,
+      { reply_markup: keyboard }
+    );
+  });
+
+  bot.callbackQuery('toggle_notifications', async (ctx) => {
+    try {
+      await ctx.answerCallbackQuery();
+      const user = await apiClient.getUserProfile(ctx.session.userId!);
+      const newValue = !(user.settings?.notifications !== false);
+
+      await apiClient.updateUserSettings(ctx.session.userId!, {
+        notifications: newValue
+      });
+
+      await ctx.reply(
+        `✅ Уведомления ${newValue ? 'включены' : 'выключены'}`,
+        { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'notifications_settings') }
+      );
+    } catch (error) {
+      logger.error('Toggle notifications error:', error);
+      await ctx.reply('❌ Не удалось изменить настройки уведомлений');
+    }
+  });
+
+  bot.callbackQuery('language_settings', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const keyboard = new InlineKeyboard()
+      .text('🇷🇺 Русский ✅', 'lang_ru')
+      .text('🇬🇧 English', 'lang_en').row()
+      .text('⬅️ Назад', 'settings');
+
+    await ctx.reply(
+      `🌐 <b>Выбор языка</b>\n\n` +
+      `Выберите язык интерфейса:`,
+      { reply_markup: keyboard }
+    );
+  });
+
+  bot.callbackQuery('currency_settings', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const keyboard = new InlineKeyboard()
+      .text('₽ RUB (Рубль) ✅', 'currency_rub')
+      .text('$ USD (Доллар)', 'currency_usd').row()
+      .text('€ EUR (Евро)', 'currency_eur')
+      .text('₸ KZT (Тенге)', 'currency_kzt').row()
+      .text('⬅️ Назад', 'settings');
+
+    await ctx.reply(
+      `💱 <b>Выбор валюты</b>\n\n` +
+      `Выберите валюту для отображения цен:`,
+      { reply_markup: keyboard }
+    );
+  });
+
+  bot.callbackQuery('delete_account', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const keyboard = new InlineKeyboard()
+      .text('✅ Да, удалить', 'confirm_delete_account')
+      .text('❌ Отмена', 'settings');
+
+    await ctx.reply(
+      `⚠️ <b>Удаление аккаунта</b>\n\n` +
+      `Вы уверены, что хотите удалить свой аккаунт?\n\n` +
+      `<b>Это действие необратимо!</b>\n\n` +
+      `Будут удалены:\n` +
+      `• Все ваши данные\n` +
+      `• История заказов\n` +
+      `• Баланс и бонусы\n` +
+      `• Сохраненные адреса`,
+      { reply_markup: keyboard }
+    );
+  });
+
+  bot.callbackQuery('confirm_delete_account', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    try {
+      await apiClient.deleteUser(ctx.session.userId!);
+      await ctx.reply(
+        `✅ <b>Аккаунт удален</b>\n\n` +
+        `Ваш аккаунт был успешно удален.\n` +
+        `Надеемся увидеть вас снова!`
+      );
+      ctx.session = { messageIds: [] };
+    } catch (error) {
+      await ctx.reply('❌ Не удалось удалить аккаунт. Обратитесь в поддержку.');
+    }
+  });
+
+  // Address actions
+  bot.callbackQuery(/^delete_addr_(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const addressId = parseInt(ctx.match[1]);
+    try {
+      await apiClient.deleteAddress(addressId);
+      await ctx.reply('✅ Адрес удален', {
+        reply_markup: new InlineKeyboard().text('📍 Мои адреса', 'my_addresses')
+      });
+    } catch (error) {
+      await ctx.reply('❌ Не удалось удалить адрес');
+    }
+  });
+
+  bot.callbackQuery(/^set_default_addr_(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const addressId = parseInt(ctx.match[1]);
+    try {
+      await apiClient.updateAddress(addressId, { isDefault: true });
+      await ctx.reply('✅ Адрес установлен как основной', {
+        reply_markup: new InlineKeyboard().text('📍 Мои адреса', 'my_addresses')
+      });
+    } catch (error) {
+      await ctx.reply('❌ Не удалось изменить адрес');
+    }
+  });
+
   // Order details
   bot.callbackQuery(/^order_details_(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();

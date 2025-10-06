@@ -77,39 +77,68 @@ class UsersService {
         }
       }
     });
-    
-    if (!user) return null;
-    
-    // Calculate statistics
-    const [totalSpent, activeOrders, lastOrder] = await Promise.all([
-      prisma.transaction.aggregate({
-        where: {
-          userId: id,
-          type: 'payment',
-          status: 'SUCCESS'
-        },
-        _sum: { amount: true }
-      }),
-      prisma.order.count({
-        where: {
-          userId: id,
-          status: {
-            notIn: ['DELIVERED', 'CANCELLED', 'REFUNDED']
+
+    return user;
+  }
+
+  async getUserByTelegramId(telegramId: bigint) {
+    const user = await prisma.user.findUnique({
+      where: { telegramId },
+      include: {
+        city: true,
+        addresses: true,
+        _count: {
+          select: {
+            orders: true,
+            referrals: true
           }
         }
+      }
+    });
+
+    return user;
+  }
+
+  async getUserProfile(userId: number) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        city: true,
+        addresses: true,
+        referredBy: true,
+        _count: {
+          select: {
+            orders: true,
+            referrals: true
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    // Get statistics
+    const [ordersStats, balance] = await Promise.all([
+      prisma.order.aggregate({
+        where: { userId },
+        _sum: { totalAmount: true },
+        _count: true
       }),
-      prisma.order.findFirst({
-        where: { userId: id },
-        orderBy: { createdAt: 'desc' }
+      prisma.transaction.aggregate({
+        where: { userId },
+        _sum: { amount: true }
       })
     ]);
-    
+
     return {
       ...user,
-      stats: {
-        totalSpent: Number(totalSpent._sum.amount || 0),
-        activeOrders,
-        lastOrderDate: lastOrder?.createdAt
+      statistics: {
+        ordersCount: ordersStats._count,
+        totalSpent: ordersStats._sum.totalAmount || 0,
+        balance: balance._sum.amount || 0,
+        referralsCount: user._count.referrals
       }
     };
   }
@@ -117,7 +146,9 @@ class UsersService {
   async updateUser(id: number, data: UpdateUserDto) {
     // Clear cache
     await redis.del(`user:${id}`);
-    
+
+    logger.info(`Updating user ${id} with data:`, JSON.stringify(data));
+
     const user = await prisma.user.update({
       where: { id },
       data,
@@ -126,18 +157,24 @@ class UsersService {
         addresses: true
       }
     });
-    
-    logger.info(`User updated: ${id}`);
-    
+
+    logger.info(`User updated: ${id}, new firstName: ${user.firstName}`);
+
     return user;
   }
   
   async getUserAddresses(userId: number) {
-    return prisma.userAddress.findMany({
+    const addresses = await prisma.userAddress.findMany({
       where: { userId },
       include: { city: true },
       orderBy: { isDefault: 'desc' }
     });
+
+    // Add cityName for backwards compatibility
+    return addresses.map(addr => ({
+      ...addr,
+      cityName: addr.city?.name
+    }));
   }
   
   async createAddress(userId: number, data: any) {
@@ -336,7 +373,7 @@ class UsersService {
           banReason: null
         }
       });
-      
+
       await tx.adminAction.create({
         data: {
           adminId,
@@ -347,12 +384,42 @@ class UsersService {
         }
       });
     });
-    
+
     await redis.del(`user:${userId}`);
-    
+
     logger.info(`User unbanned: ${userId}`);
-    
+
     return { success: true };
+  }
+
+  async getUserBalance(userId: number) {
+    const result = await prisma.transaction.aggregate({
+      where: { userId },
+      _sum: { amount: true }
+    });
+
+    return {
+      balance: result._sum.amount || 0,
+      currency: 'RUB'
+    };
+  }
+
+  async depositBalance(userId: number, amount: number, method: string) {
+    const transaction = await prisma.transaction.create({
+      data: {
+        userId,
+        type: 'DEPOSIT',
+        amount,
+        currency: 'RUB',
+        status: 'COMPLETED',
+        method,
+        description: `Пополнение баланса через ${method}`
+      }
+    });
+
+    logger.info(`Balance deposited: ${userId}, amount: ${amount}`);
+
+    return transaction;
   }
 }
 

@@ -21,7 +21,7 @@ export async function handleProfile(ctx: MyContext) {
     }
     
     const user = await apiClient.getUserProfile(ctx.session.userId);
-    
+
     const profileKeyboard = new InlineKeyboard()
       .text('📦 Мои заказы', 'my_orders')
       .text('📍 Мои адреса', 'my_addresses').row()
@@ -29,25 +29,29 @@ export async function handleProfile(ctx: MyContext) {
       .text('🎁 Реферальная программа', 'referral').row()
       .text('📊 Статистика', 'my_stats')
       .text('⚙️ Настройки', 'settings');
-    
+
+    const stats = user.statistics || {};
+    const balance = typeof user.balance === 'string' ? parseFloat(user.balance) : user.balance;
+    const bonusBalance = typeof user.bonusBalance === 'string' ? parseFloat(user.bonusBalance) : user.bonusBalance;
+
     await ctx.reply(
       `${EMOJI.PROFILE} <b>Мой профиль</b>\n\n` +
-      
+
       `🆔 <b>ID:</b> <code>${user.id}</code>\n` +
       `👤 <b>Имя:</b> ${user.firstName} ${user.lastName || ''}\n` +
       `📱 <b>Телефон:</b> ${FormatUtils.formatPhoneNumber(user.phone)}\n` +
-      `📧 <b>Email:</b> ${user.email}\n` +
+      `📧 <b>Email:</b> ${user.email || 'Не указан'}\n` +
       `🏙 <b>Город:</b> ${user.city?.name || 'Не указан'}\n\n` +
-      
-      `💰 <b>Баланс:</b> ${FormatUtils.formatMoney(user.balance)}\n` +
-      `🎁 <b>Бонусы:</b> ${FormatUtils.formatMoney(user.bonusBalance)}\n` +
-      `📦 <b>Заказов:</b> ${user.ordersCount}\n` +
-      `💸 <b>Потрачено:</b> ${FormatUtils.formatMoney(user.totalSpent)}\n\n` +
-      
+
+      `💰 <b>Баланс:</b> ${FormatUtils.formatMoney(balance || 0)}\n` +
+      `🎁 <b>Бонусы:</b> ${FormatUtils.formatMoney(bonusBalance || 0)}\n` +
+      `📦 <b>Заказов:</b> ${stats.ordersCount || 0}\n` +
+      `💸 <b>Потрачено:</b> ${FormatUtils.formatMoney(stats.totalSpent || 0)}\n\n` +
+
       `🔗 <b>Реферальный код:</b> <code>${user.referralCode}</code>\n` +
-      `👥 <b>Приглашено:</b> ${user.referrals?.length || 0} человек\n\n` +
-      
-      `📅 <b>Дата регистрации:</b> ${FormatUtils.formatDate(user.registeredAt)}`,
+      `👥 <b>Приглашено:</b> ${stats.referralsCount || 0} человек\n\n` +
+
+      `📅 <b>Дата регистрации:</b> ${FormatUtils.formatDate(user.createdAt)}`,
       { reply_markup: profileKeyboard }
     );
     
@@ -92,7 +96,7 @@ export async function handleMyOrders(ctx: MyContext) {
       message += `<b>📦 Активные заказы:</b>\n\n`;
       
       for (const order of activeOrders.slice(0, 5)) {
-        message += `${FormatUtils.formatOrderId(order.id)} • ${ORDER_STATUS_LABELS[order.status]}\n`;
+        message += `${FormatUtils.formatOrderId(order.id)} • ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}\n`;
         message += `Трек: <code>${order.trackNumber}</code>\n`;
         if (order.externalTrackNumber) {
           message += `Внешний трек: <code>${order.externalTrackNumber}</code>\n`;
@@ -105,7 +109,7 @@ export async function handleMyOrders(ctx: MyContext) {
       message += `<b>✅ Завершенные заказы:</b>\n\n`;
       
       for (const order of completedOrders.slice(0, 3)) {
-        message += `${FormatUtils.formatOrderId(order.id)} • ${ORDER_STATUS_LABELS[order.status]}\n`;
+        message += `${FormatUtils.formatOrderId(order.id)} • ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}\n`;
         message += `Завершен: ${FormatUtils.formatDate(order.deliveredAt || order.cancelledAt)}\n\n`;
       }
     }
@@ -172,7 +176,7 @@ export async function handleOrderDetails(ctx: MyContext, orderId: number) {
     
     message += `<b>Основная информация:</b>\n`;
     message += `Тип: ${order.type === 'SHIPPING' ? '✈️ Доставка' : '🛍 Выкуп'}\n`;
-    message += `Статус: ${ORDER_STATUS_LABELS[order.status]}\n`;
+    message += `Статус: ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}\n`;
     message += `Трек: <code>${order.trackNumber}</code>\n`;
     
     if (order.externalTrackNumber) {
@@ -316,6 +320,188 @@ export async function handleBalance(ctx: MyContext) {
   } catch (error) {
     logger.error('Balance handler error:', error);
     await ctx.reply(`${EMOJI.ERROR} Не удалось загрузить баланс.`);
+  }
+}
+
+export async function handleMyStats(ctx: MyContext) {
+  try {
+    const user = await apiClient.getUserProfile(ctx.session.userId!);
+    const stats = user.statistics || {};
+
+    const statsKeyboard = new InlineKeyboard()
+      .text('⬅️ В профиль', 'profile');
+
+    await ctx.reply(
+      `📊 <b>Моя статистика</b>\n\n` +
+
+      `<b>Заказы:</b>\n` +
+      `• Всего заказов: ${stats.ordersCount || 0}\n` +
+      `• Активных: ${stats.activeOrders || 0}\n` +
+      `• Доставлено: ${stats.deliveredOrders || 0}\n` +
+      `• Отменено: ${stats.cancelledOrders || 0}\n\n` +
+
+      `<b>Финансы:</b>\n` +
+      `• Потрачено всего: ${FormatUtils.formatMoney(stats.totalSpent || 0)}\n` +
+      `• Средний чек: ${FormatUtils.formatMoney(stats.avgOrderValue || 0)}\n` +
+      `• Экономия на выкупе: ${FormatUtils.formatMoney(stats.savedAmount || 0)}\n\n` +
+
+      `<b>Активность:</b>\n` +
+      `• С нами с: ${FormatUtils.formatDate(user.createdAt)}\n` +
+      `• Дней с нами: ${Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24))}\n` +
+      `• Последний заказ: ${stats.lastOrderDate ? FormatUtils.formatDate(stats.lastOrderDate) : 'Нет заказов'}\n\n` +
+
+      `<b>Рефералы:</b>\n` +
+      `• Приглашено: ${stats.referralsCount || 0} чел.\n` +
+      `• Заработано: ${FormatUtils.formatMoney(stats.referralEarnings || 0)}`,
+      { reply_markup: statsKeyboard }
+    );
+
+  } catch (error) {
+    logger.error('My stats handler error:', error);
+    await ctx.reply(`${EMOJI.ERROR} Не удалось загрузить статистику.`);
+  }
+}
+
+export async function handleReferral(ctx: MyContext) {
+  try {
+    const user = await apiClient.getUserProfile(ctx.session.userId!);
+    const stats = user.statistics || {};
+
+    const referralKeyboard = new InlineKeyboard()
+      .text('📤 Поделиться ссылкой', 'share_referral').row()
+      .text('👥 Мои рефералы', 'my_referrals').row()
+      .text('⬅️ В профиль', 'profile');
+
+    const botUsername = (await ctx.api.getMe()).username;
+    const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
+
+    await ctx.reply(
+      `🎁 <b>Реферальная программа</b>\n\n` +
+
+      `<b>Ваши бонусы:</b>\n` +
+      `• Приглашено друзей: ${stats.referralsCount || 0}\n` +
+      `• Заработано бонусов: ${FormatUtils.formatMoney(stats.referralEarnings || 0)}\n` +
+      `• Активных рефералов: ${stats.activeReferrals || 0}\n\n` +
+
+      `<b>Как это работает?</b>\n` +
+      `1️⃣ Пригласите друга по вашей ссылке\n` +
+      `2️⃣ Друг регистрируется и делает первый заказ\n` +
+      `3️⃣ Вы получаете 5% от суммы его заказов\n` +
+      `4️⃣ Друг получает 500₽ бонусов\n\n` +
+
+      `<b>Ваша реферальная ссылка:</b>\n` +
+      `<code>${referralLink}</code>\n\n` +
+
+      `<b>Ваш реферальный код:</b>\n` +
+      `<code>${user.referralCode}</code>`,
+      { reply_markup: referralKeyboard }
+    );
+
+  } catch (error) {
+    logger.error('Referral handler error:', error);
+    await ctx.reply(`${EMOJI.ERROR} Не удалось загрузить информацию о реферальной программе.`);
+  }
+}
+
+export async function handleSettings(ctx: MyContext) {
+  try {
+    const user = await apiClient.getUserProfile(ctx.session.userId!);
+
+    const settingsKeyboard = new InlineKeyboard()
+      .text('👤 Изменить имя', 'edit_name')
+      .text('📱 Изменить телефон', 'edit_phone').row()
+      .text('📧 Изменить email', 'edit_email')
+      .text('🏙 Изменить город', 'edit_city').row()
+      .text('🔔 Уведомления', 'notifications_settings').row()
+      .text('🌐 Язык', 'language_settings')
+      .text('💱 Валюта', 'currency_settings').row()
+      .text('🗑 Удалить аккаунт', 'delete_account').row()
+      .text('⬅️ В профиль', 'profile');
+
+    await ctx.reply(
+      `⚙️ <b>Настройки профиля</b>\n\n` +
+
+      `<b>Текущие данные:</b>\n` +
+      `👤 Имя: ${user.firstName} ${user.lastName || ''}\n` +
+      `📱 Телефон: ${FormatUtils.formatPhoneNumber(user.phone)}\n` +
+      `📧 Email: ${user.email || 'Не указан'}\n` +
+      `🏙 Город: ${user.city?.name || 'Не указан'}\n\n` +
+
+      `<b>Настройки:</b>\n` +
+      `🔔 Уведомления: ${user.settings?.notifications !== false ? 'Включены' : 'Выключены'}\n` +
+      `🌐 Язык: Русский\n` +
+      `💱 Валюта: RUB (₽)`,
+      { reply_markup: settingsKeyboard }
+    );
+
+  } catch (error) {
+    logger.error('Settings handler error:', error);
+    await ctx.reply(`${EMOJI.ERROR} Не удалось загрузить настройки.`);
+  }
+}
+
+export async function handleTransactions(ctx: MyContext) {
+  try {
+    const user = await apiClient.getUserProfile(ctx.session.userId!);
+    // Mock transactions for now
+    const transactions = [
+      { type: 'deposit', amount: 5000, description: 'Пополнение баланса', date: new Date() },
+      { type: 'payment', amount: -3500, description: 'Оплата заказа #1234', date: new Date() },
+      { type: 'bonus', amount: 500, description: 'Бонус за реферала', date: new Date() }
+    ];
+
+    const transactionsKeyboard = new InlineKeyboard()
+      .text('⬅️ К балансу', 'my_balance');
+
+    let message = `📜 <b>История операций</b>\n\n`;
+
+    if (transactions.length === 0) {
+      message += `История операций пуста.`;
+    } else {
+      transactions.slice(0, 10).forEach(tx => {
+        const emoji = tx.type === 'deposit' || tx.type === 'bonus' ? '➕' : '➖';
+        message += `${emoji} <b>${FormatUtils.formatMoney(Math.abs(tx.amount))}</b>\n`;
+        message += `${tx.description}\n`;
+        message += `${FormatUtils.formatDate(tx.date)}\n\n`;
+      });
+    }
+
+    await ctx.reply(message, { reply_markup: transactionsKeyboard });
+
+  } catch (error) {
+    logger.error('Transactions handler error:', error);
+    await ctx.reply(`${EMOJI.ERROR} Не удалось загрузить историю операций.`);
+  }
+}
+
+export async function handleUseBonus(ctx: MyContext) {
+  try {
+    const balance = await apiClient.getUserBalance(ctx.session.userId!);
+
+    const bonusKeyboard = new InlineKeyboard()
+      .text('⬅️ К балансу', 'my_balance');
+
+    await ctx.reply(
+      `🎁 <b>Использование бонусов</b>\n\n` +
+
+      `💰 <b>Доступно бонусов:</b> ${FormatUtils.formatMoney(balance.bonusBalance)}\n\n` +
+
+      `<b>Как использовать бонусы:</b>\n` +
+      `1️⃣ Создайте новый заказ\n` +
+      `2️⃣ При оплате выберите "Оплатить бонусами"\n` +
+      `3️⃣ Бонусы можно использовать до 50% от суммы заказа\n\n` +
+
+      `<b>Как получить бонусы:</b>\n` +
+      `• Приглашайте друзей (+500₽ за каждого)\n` +
+      `• Оставляйте отзывы (+100₽)\n` +
+      `• Участвуйте в акциях\n` +
+      `• Получайте кешбэк с заказов (2%)`,
+      { reply_markup: bonusKeyboard }
+    );
+
+  } catch (error) {
+    logger.error('Use bonus handler error:', error);
+    await ctx.reply(`${EMOJI.ERROR} Не удалось загрузить информацию о бонусах.`);
   }
 }
 

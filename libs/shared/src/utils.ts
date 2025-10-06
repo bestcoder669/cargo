@@ -1,5 +1,8 @@
 // ==================== libs/shared/src/utils.ts ====================
 
+import { CONSTANTS } from './constants';
+import { AdminRole, OrderStatus } from './enums';
+
 export class ValidationUtils {
   static isValidEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

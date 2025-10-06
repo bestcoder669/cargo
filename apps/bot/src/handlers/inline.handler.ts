@@ -1,9 +1,10 @@
 // ==================== apps/bot/src/handlers/inline.handler.ts ====================
 
-import { Bot, InlineQueryResultArticle } from 'grammy';
+import { Bot } from 'grammy';
+import { InlineQueryResult } from 'grammy/types';
 import { MyContext } from '../core/types';
 import { apiClient } from '../core/api/client';
-import { EMOJI, FormatUtils } from '@cargoexpress/shared';
+import { EMOJI, FormatUtils, ORDER_STATUS_LABELS } from '@cargoexpress/shared';
 import { logger } from '../core/logger';
 
 export function handleInlineQueries(bot: Bot<MyContext>) {
@@ -12,7 +13,7 @@ export function handleInlineQueries(bot: Bot<MyContext>) {
     
     if (!query) {
       // Показываем подсказки
-      const results: InlineQueryResultArticle[] = [
+      const results: InlineQueryResult[] = [
         {
           type: 'article',
           id: 'help',
@@ -55,16 +56,16 @@ export function handleInlineQueries(bot: Bot<MyContext>) {
         const order = await apiClient.getOrderByTrackNumber(query.toUpperCase());
         
         if (order) {
-          const results: InlineQueryResultArticle[] = [{
+          const results: InlineQueryResult[] = [{
             type: 'article',
             id: `order_${order.id}`,
             title: `📦 Заказ ${order.trackNumber}`,
-            description: `Статус: ${ORDER_STATUS_LABELS[order.status]}`,
+            description: `Статус: ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}`,
             input_message_content: {
               message_text: 
                 `${EMOJI.PACKAGE} <b>Информация о заказе</b>\n\n` +
                 `Трек: <code>${order.trackNumber}</code>\n` +
-                `Статус: ${ORDER_STATUS_LABELS[order.status]}\n` +
+                `Статус: ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}\n` +
                 `Тип: ${order.type === 'SHIPPING' ? '✈️ Доставка' : '🛍 Выкуп'}\n` +
                 `Обновлено: ${FormatUtils.formatDate(order.updatedAt)}\n\n` +
                 `Для отслеживания используйте @${ctx.me.username}`,
@@ -93,7 +94,7 @@ export function handleInlineQueries(bot: Bot<MyContext>) {
       }
     } else {
       // Поиск по другим параметрам
-      const results: InlineQueryResultArticle[] = [
+      const results: InlineQueryResult[] = [
         {
           type: 'article',
           id: 'search',

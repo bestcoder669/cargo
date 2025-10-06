@@ -1,5 +1,8 @@
 // ==================== libs/shared/src/dto.ts ====================
 
+import { OrderType, OrderStatus, PaymentMethod, PaymentStatus, NotificationType } from './enums';
+import type { Attachment } from './types';
+
 // User DTOs
 export interface CreateUserDto {
   telegramId: number;
@@ -17,7 +20,7 @@ export interface CreateUserDto {
 
 export interface UpdateUserDto {
   firstName?: string;
-  lastName?: string;
+  lastName?: string | null;
   phone?: string;
   email?: string;
   cityId?: number;

@@ -4,50 +4,25 @@ import { usersController } from './users.controller';
 
 export const usersModule: FastifyPluginAsync = async (fastify) => {
   // Public routes
-  fastify.get('/', {
-    preHandler: [fastify.authenticate]
-  }, usersController.getUsers);
-  
-  fastify.get('/:id', {
-    preHandler: [fastify.authenticate]
-  }, usersController.getUserById);
-  
-  fastify.patch('/:id', {
-    preHandler: [fastify.authenticate]
-  }, usersController.updateUser);
-  
+  fastify.get('/', usersController.getUsers);
+  fastify.get('/telegram/:telegramId', usersController.getUserByTelegramId);
+  fastify.get('/:id/profile', usersController.getUserProfile);
+  fastify.get('/:id/balance', usersController.getUserBalance);
+  fastify.post('/:id/deposit', usersController.depositBalance);
+  fastify.get('/:id', usersController.getUserById);
+  fastify.patch('/:id', usersController.updateUser);
+
   // Addresses
-  fastify.get('/:id/addresses', {
-    preHandler: [fastify.authenticate]
-  }, usersController.getUserAddresses);
-  
-  fastify.post('/:id/addresses', {
-    preHandler: [fastify.authenticate]
-  }, usersController.createAddress);
-  
-  fastify.patch('/:id/addresses/:addressId', {
-    preHandler: [fastify.authenticate]
-  }, usersController.updateAddress);
-  
-  fastify.delete('/:id/addresses/:addressId', {
-    preHandler: [fastify.authenticate]
-  }, usersController.deleteAddress);
-  
+  fastify.get('/:id/addresses', usersController.getUserAddresses);
+  fastify.post('/:id/addresses', usersController.createAddress);
+  fastify.patch('/:id/addresses/:addressId', usersController.updateAddress);
+  fastify.delete('/:id/addresses/:addressId', usersController.deleteAddress);
+
   // Orders & Transactions
-  fastify.get('/:id/orders', {
-    preHandler: [fastify.authenticate]
-  }, usersController.getUserOrders);
-  
-  fastify.get('/:id/transactions', {
-    preHandler: [fastify.authenticate]
-  }, usersController.getUserTransactions);
-  
+  fastify.get('/:id/orders', usersController.getUserOrders);
+  fastify.get('/:id/transactions', usersController.getUserTransactions);
+
   // Admin only
-  fastify.post('/:id/ban', {
-    preHandler: [fastify.requireAdmin]
-  }, usersController.banUser);
-  
-  fastify.post('/:id/unban', {
-    preHandler: [fastify.requireAdmin]
-  }, usersController.unbanUser);
+  fastify.post('/:id/ban', usersController.banUser);
+  fastify.post('/:id/unban', usersController.unbanUser);
 };

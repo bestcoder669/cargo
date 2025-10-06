@@ -10,17 +10,11 @@ export const countriesModule: FastifyPluginAsync = async (fastify) => {
   fastify.get('/:id', countriesController.getCountry);
   
   // Admin routes for countries
-  fastify.post('/', {
-    preHandler: [fastify.requireAdmin]
-  }, countriesController.createCountry);
-  
-  fastify.patch('/:id', {
-    preHandler: [fastify.requireAdmin]
-  }, countriesController.updateCountry);
-  
-  fastify.delete('/:id', {
-    preHandler: [fastify.requireAdmin]
-  }, countriesController.deleteCountry);
+  fastify.post('/', countriesController.createCountry);
+
+  fastify.patch('/:id', countriesController.updateCountry);
+
+  fastify.delete('/:id', countriesController.deleteCountry);
   
   // Warehouses
   fastify.register(async (fastify) => {
@@ -28,17 +22,11 @@ export const countriesModule: FastifyPluginAsync = async (fastify) => {
     fastify.get('/:id', warehousesController.getWarehouseById);
     
     // Admin routes
-    fastify.post('/', {
-      preHandler: [fastify.requireAdmin]
-    }, warehousesController.createWarehouse);
-    
-    fastify.patch('/:id', {
-      preHandler: [fastify.requireAdmin]
-    }, warehousesController.updateWarehouse);
-    
-    fastify.delete('/:id', {
-      preHandler: [fastify.requireAdmin]
-    }, warehousesController.deleteWarehouse);
+    fastify.post('/', warehousesController.createWarehouse);
+
+    fastify.patch('/:id', warehousesController.updateWarehouse);
+
+    fastify.delete('/:id', warehousesController.deleteWarehouse);
   }, { prefix: '/warehouses' });
   
   // Tariffs
@@ -47,16 +35,10 @@ export const countriesModule: FastifyPluginAsync = async (fastify) => {
     fastify.post('/calculate', tariffsController.calculateShipping);
     
     // Admin routes
-    fastify.post('/', {
-      preHandler: [fastify.requireAdmin]
-    }, tariffsController.createTariff);
-    
-    fastify.patch('/:id', {
-      preHandler: [fastify.requireAdmin]
-    }, tariffsController.updateTariff);
-    
-    fastify.delete('/:id', {
-      preHandler: [fastify.requireAdmin]
-    }, tariffsController.deleteTariff);
+    fastify.post('/', tariffsController.createTariff);
+
+    fastify.patch('/:id', tariffsController.updateTariff);
+
+    fastify.delete('/:id', tariffsController.deleteTariff);
   }, { prefix: '/tariffs' });
 };

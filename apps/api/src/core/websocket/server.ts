@@ -79,9 +79,10 @@ export async function initializeWebSocket(server: Server): Promise<SocketServer>
     // Handle scanner events
     socket.on(SocketEvents.SCANNER_SESSION_START, async (data) => {
       if (socket.data.type !== 'admin') {
-        return socket.emit('error', 'Unauthorized');
+        socket.emit('error', 'Unauthorized');
+        return;
       }
-      
+
       socket.join(`scanner:${data.sessionId}`);
       socket.broadcast.to('admins').emit(SocketEvents.SCANNER_SESSION_START, data);
     });
@@ -134,9 +135,10 @@ export async function initializeWebSocket(server: Server): Promise<SocketServer>
     // Handle broadcast events
     socket.on(SocketEvents.BROADCAST_MESSAGE, async (data) => {
       if (socket.data.type !== 'admin') {
-        return socket.emit('error', 'Unauthorized');
+        socket.emit('error', 'Unauthorized');
+        return;
       }
-      
+
       // Broadcast to all users
       io.emit(SocketEvents.BROADCAST_MESSAGE, data);
     });

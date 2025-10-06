@@ -2,7 +2,9 @@
 
 // Redis Pub/Sub для real-time
 import { redis } from './client';
-export const pub = redis.duplicate();
-export const sub = redis.duplicate();
+import type { createClient } from 'redis';
+
+export const pub: ReturnType<typeof createClient> = redis.duplicate();
+export const sub: ReturnType<typeof createClient> = redis.duplicate();
 
 Promise.all([pub.connect(), sub.connect()]).catch(console.error);

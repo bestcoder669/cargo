@@ -1,4 +1,4 @@
-// ==================== apps/api/src/modules/notifications/notification.service.ts ====================
+// ==================== apps/api/src/modules/notifications/notifications.service.ts ====================
 
 import { prisma } from '@cargoexpress/prisma';
 import { redis } from '../../core/redis';

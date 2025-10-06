@@ -5,9 +5,6 @@ import { scannerController } from './scanner.controller';
 import { scannerWebsocket } from './scanner.websocket';
 
 export const scannerModule: FastifyPluginAsync = async (fastify) => {
-  // All routes require authentication
-  fastify.addHook('onRequest', fastify.authenticate);
-  
   // Scanner sessions
   fastify.post('/session/start', scannerController.startSession);
   fastify.post('/session/:id/end', scannerController.endSession);

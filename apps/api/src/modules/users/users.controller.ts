@@ -25,14 +25,14 @@ class UsersController {
   }>, reply: FastifyReply) {
     try {
       const user = await usersService.getUserById(parseInt(request.params.id));
-      
+
       if (!user) {
         return reply.code(404).send({
           success: false,
           error: 'USER_NOT_FOUND'
         });
       }
-      
+
       reply.send({
         success: true,
         data: user
@@ -42,7 +42,64 @@ class UsersController {
       throw error;
     }
   }
-  
+
+  async getUserByTelegramId(request: FastifyRequest<{
+    Params: { telegramId: string }
+  }>, reply: FastifyReply) {
+    try {
+      const user = await usersService.getUserByTelegramId(BigInt(request.params.telegramId));
+
+      if (!user) {
+        return reply.code(404).send({
+          success: false,
+          error: 'USER_NOT_FOUND'
+        });
+      }
+
+      reply.send({
+        success: true,
+        data: user
+      });
+    } catch (error) {
+      logger.error('Get user by telegram ID error:', error);
+      throw error;
+    }
+  }
+
+  async getUserProfile(request: FastifyRequest<{
+    Params: { id: string }
+  }>, reply: FastifyReply) {
+    try {
+      const userId = parseInt(request.params.id);
+
+      // Allow bot or check ownership or admin
+      const isBot = request.user.role === 'bot';
+      if (!isBot && request.user.id !== userId && !request.user.adminId) {
+        return reply.code(403).send({
+          success: false,
+          error: 'FORBIDDEN'
+        });
+      }
+
+      const profile = await usersService.getUserProfile(userId);
+
+      if (!profile) {
+        return reply.code(404).send({
+          success: false,
+          error: 'USER_NOT_FOUND'
+        });
+      }
+
+      reply.send({
+        success: true,
+        data: profile
+      });
+    } catch (error) {
+      logger.error('Get user profile error:', error);
+      throw error;
+    }
+  }
+
   async updateUser(request: FastifyRequest<{
     Params: { id: string };
     Body: UpdateUserDto
@@ -262,15 +319,73 @@ class UsersController {
     try {
       const userId = parseInt(request.params.id);
       const adminId = request.user.adminId;
-      
+
       await usersService.unbanUser(userId, adminId);
-      
+
       reply.send({
         success: true,
         message: 'User unbanned'
       });
     } catch (error) {
       logger.error('Unban user error:', error);
+      throw error;
+    }
+  }
+
+  async getUserBalance(request: FastifyRequest<{
+    Params: { id: string }
+  }>, reply: FastifyReply) {
+    try {
+      const userId = parseInt(request.params.id);
+
+      // Allow bot or check ownership or admin
+      const isBot = request.user.role === 'bot';
+      if (!isBot && userId !== request.user.id && !request.user.adminId) {
+        return reply.code(403).send({
+          success: false,
+          error: 'FORBIDDEN'
+        });
+      }
+
+      const balance = await usersService.getUserBalance(userId);
+
+      reply.send({
+        success: true,
+        data: balance
+      });
+    } catch (error) {
+      logger.error('Get user balance error:', error);
+      throw error;
+    }
+  }
+
+  async depositBalance(request: FastifyRequest<{
+    Params: { id: string };
+    Body: { amount: number; method: string }
+  }>, reply: FastifyReply) {
+    try {
+      const userId = parseInt(request.params.id);
+
+      // Check ownership or admin
+      if (userId !== request.user.id && !request.user.adminId) {
+        return reply.code(403).send({
+          success: false,
+          error: 'FORBIDDEN'
+        });
+      }
+
+      const transaction = await usersService.depositBalance(
+        userId,
+        request.body.amount,
+        request.body.method
+      );
+
+      reply.send({
+        success: true,
+        data: transaction
+      });
+    } catch (error) {
+      logger.error('Deposit balance error:', error);
       throw error;
     }
   }

@@ -1,3 +1,5 @@
+import { OrderType, OrderStatus, PaymentMethod, PaymentStatus, NotificationType } from './enums';
+import type { Attachment } from './types';
 export interface CreateUserDto {
     telegramId: number;
     username?: string;

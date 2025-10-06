@@ -52,7 +52,21 @@ export declare const CONSTANTS: {
     };
 };
 export declare const ORDER_STATUS_LABELS: {
-    [x: number]: string;
+    PENDING: string;
+    PAID: string;
+    PROCESSING: string;
+    PURCHASING: string;
+    WAREHOUSE_RECEIVED: string;
+    PACKING: string;
+    SHIPPED: string;
+    IN_TRANSIT: string;
+    CUSTOMS_CLEARANCE: string;
+    ARRIVED: string;
+    LOCAL_DELIVERY: string;
+    READY_FOR_PICKUP: string;
+    DELIVERED: string;
+    CANCELLED: string;
+    REFUNDED: string;
 };
 export declare const EMOJI: {
     USA: string;

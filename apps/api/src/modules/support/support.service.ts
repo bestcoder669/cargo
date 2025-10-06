@@ -63,8 +63,8 @@ class SupportService {
     page?: number;
     limit?: number;
   }) {
-    const page = filters.page || 1;
-    const limit = filters.limit || 20;
+    const page = parseInt(filters.page) || 1;
+    const limit = parseInt(filters.limit) || 20;
     const skip = (page - 1) * limit;
     
     const where: any = {};
@@ -301,7 +301,7 @@ class SupportService {
     return chat;
   }
   
-  async closeChat(chatId: number, operatorId: number, resolved: boolean = true) {
+  async closeChat(chatId: number, operatorId: number | null, resolved: boolean = true) {
     const chat = await prisma.supportChat.update({
       where: { id: chatId },
       data: {
@@ -383,19 +383,19 @@ class SupportService {
   
   async calculateAverageResponseTime() {
     const result = await prisma.$queryRaw<any[]>`
-      SELECT AVG(EXTRACT(EPOCH FROM (first_reply.created_at - chat.created_at)) / 60) as avg_minutes
+      SELECT AVG(EXTRACT(EPOCH FROM (first_reply."createdAt" - chat."createdAt")) / 60) as avg_minutes
       FROM "SupportChat" chat
       JOIN LATERAL (
-        SELECT created_at
+        SELECT "createdAt"
         FROM "SupportMessage"
-        WHERE chat_id = chat.id
-          AND from_user = false
-        ORDER BY created_at ASC
+        WHERE "chatId" = chat.id
+          AND "fromUser" = false
+        ORDER BY "createdAt" ASC
         LIMIT 1
       ) first_reply ON true
-      WHERE chat.created_at >= NOW() - INTERVAL '7 days'
+      WHERE chat."createdAt" >= NOW() - INTERVAL '7 days'
     `;
-    
+
     return Math.round(result[0]?.avg_minutes || 0);
   }
   
@@ -455,6 +455,26 @@ class SupportService {
       },
       orderBy: { createdAt: 'desc' }
     });
+  }
+
+  async rateChat(chatId: number, rating: number) {
+    const chat = await prisma.supportChat.update({
+      where: { id: chatId },
+      data: { rating }
+    });
+
+    logger.info(`Chat ${chatId} rated: ${rating}`);
+
+    return chat;
+  }
+
+  async updateChat(chatId: number, data: any) {
+    const chat = await prisma.supportChat.update({
+      where: { id: chatId },
+      data
+    });
+
+    return chat;
   }
 }
 

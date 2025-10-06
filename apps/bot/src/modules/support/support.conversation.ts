@@ -1,6 +1,7 @@
 // ==================== apps/bot/src/modules/support/support.conversation.ts ====================
 
-import { MyContext, MyConversation } from '../../core/types';
+import { Conversation } from '@grammyjs/conversations';
+import { MyContext } from '../../core/types';
 import { apiClient } from '../../core/api/client';
 import { wsClient } from '../../core/websocket/client';
 import { Keyboard, InlineKeyboard } from 'grammy';
@@ -8,14 +9,14 @@ import { EMOJI, SocketEvents } from '@cargoexpress/shared';
 import { logger } from '../../core/logger';
 
 export async function supportConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   try {
     // Check for existing open chat
     const chats = await apiClient.getUserSupportChats(ctx.session.userId!);
-    const openChat = chats.find(c => c.status !== 'CLOSED');
-    
+    const openChat = chats.find(c => c.status !== 'CLOSED' && c.status !== 'RESOLVED');
+
     if (openChat) {
       // Continue existing chat
       await continueSupportChat(conversation, ctx, openChat);
@@ -34,7 +35,7 @@ export async function supportConversation(
 }
 
 async function startNewSupportChat(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   const topicsKeyboard = new InlineKeyboard()
@@ -132,7 +133,7 @@ async function startNewSupportChat(
 }
 
 async function continueSupportChat(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext,
   chat: any
 ) {
@@ -157,25 +158,14 @@ async function continueSupportChat(
   // Chat loop
   while (true) {
     const msgCtx = await conversation.wait();
-    
+
+    // Check if user wants to close chat
     if (msgCtx.message?.text === '❌ Завершить чат') {
-      // Close chat
-      await ctx.reply(
-        'Вы уверены, что хотите завершить чат?',
-        {
-          reply_markup: new InlineKeyboard()
-            .text('✅ Да, завершить', 'confirm_close')
-            .text('❌ Нет, продолжить', 'cancel_close')
-        }
-      );
-      
-      const closeCtx = await conversation.waitForCallbackQuery(/^(confirm|cancel)_close/);
-      await closeCtx.answerCallbackQuery();
-      
-      if (closeCtx.callbackQuery.data === 'confirm_close') {
-        wsClient.emit('support:chat_closed', { chatId: chat.id });
+      // Close chat via API
+      try {
+        await apiClient.closeSupportChat(chat.id);
         wsClient.off('support:admin_reply', handleAdminReply);
-        
+
         await ctx.reply(
           `${EMOJI.SUCCESS} Чат завершен.\n` +
           `Спасибо за обращение!\n\n` +
@@ -186,18 +176,35 @@ async function continueSupportChat(
               .text('⭐⭐', 'rate_2')
               .text('⭐⭐⭐', 'rate_3')
               .text('⭐⭐⭐⭐', 'rate_4')
-              .text('⭐⭐⭐⭐⭐', 'rate_5'),
-            ...{ remove_keyboard: true }
+              .text('⭐⭐⭐⭐⭐', 'rate_5')
           }
         );
-        
+
+        // Remove keyboard button
+        await ctx.reply('👋 Возвращайтесь, если понадобится помощь!', {
+          reply_markup: { remove_keyboard: true }
+        });
+
         const rateCtx = await conversation.waitForCallbackQuery(/^rate_/);
         const rating = parseInt(rateCtx.callbackQuery.data.replace('rate_', ''));
         await rateCtx.answerCallbackQuery('Спасибо за оценку!');
-        
+
         // Save rating
         await apiClient.rateSupportChat(chat.id, rating);
-        
+
+        break;
+      } catch (error) {
+        logger.error('Close chat error:', error);
+
+        // Remove keyboard button on error
+        await ctx.reply(
+          `${EMOJI.ERROR} Ошибка при закрытии чата.\n` +
+          `Попробуйте позже или напишите /support для нового обращения.`,
+          {
+            reply_markup: { remove_keyboard: true }
+          }
+        );
+
         break;
       }
     } else if (msgCtx.message?.text) {

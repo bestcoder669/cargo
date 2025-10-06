@@ -92,13 +92,14 @@ class WebSocketClient extends EventEmitter {
     });
   }
   
-  emit(event: string, data?: any): void {
+  emitEvent(event: string, data?: any): boolean {
     if (!this.socket) {
       logger.warn(`Cannot emit event ${event}: WebSocket not connected`);
-      return;
+      return false;
     }
-    
+
     this.socket.emit(event, data);
+    return true;
   }
   
   disconnect(): void {

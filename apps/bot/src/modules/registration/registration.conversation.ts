@@ -1,13 +1,14 @@
 // ==================== apps/bot/src/modules/registration/registration.conversation.ts ====================
 
-import { MyContext, MyConversation } from '../../core/types';
+import { Conversation } from '@grammyjs/conversations';
+import { MyContext } from '../../core/types';
 import { apiClient } from '../../core/api/client';
 import { Keyboard, InlineKeyboard } from 'grammy';
 import { ValidationUtils, EMOJI } from '@cargoexpress/shared';
 import { logger } from '../../core/logger';
 
 export async function registrationConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   try {
@@ -40,8 +41,9 @@ export async function registrationConversation(
       `Введите ваше полное имя (Имя Фамилия):`
     );
     ctx.session.messageIds!.push(nameMsg.message_id);
-    
-    const fullName = await conversation.form.text();
+
+    const nameCtx = await conversation.wait();
+    const fullName = nameCtx.message?.text || '';
     
     // Validate name
     const nameParts = fullName.trim().split(' ');
@@ -110,8 +112,9 @@ export async function registrationConversation(
       { reply_markup: { remove_keyboard: true } }
     );
     ctx.session.messageIds = [emailMsg.message_id];
-    
-    const email = await conversation.form.text();
+
+    const emailCtx = await conversation.wait();
+    const email = emailCtx.message?.text || '';
     
     if (!ValidationUtils.isValidEmail(email)) {
       const errorMsg = await ctx.reply(
@@ -128,86 +131,23 @@ export async function registrationConversation(
     // Step 4: City
     const cityMsg = await ctx.reply(
       `${EMOJI.LOCATION} <b>Шаг 4/5: Город</b>\n\n` +
-      `Загружаю список городов...`
+      `Введите название вашего города:`
     );
     ctx.session.messageIds = [cityMsg.message_id];
-    
-    // Get popular cities
-    const cities = await apiClient.getCities('RU', true);
-    
-    if (cities.length === 0) {
-      await ctx.reply(
-        `${EMOJI.ERROR} Не удалось загрузить список городов.\n` +
-        `Пожалуйста, попробуйте позже или обратитесь в поддержку.`
+
+    const cityInputCtx = await conversation.wait();
+    const cityName = cityInputCtx.message?.text || '';
+
+    if (cityName.length < 2) {
+      const errorMsg = await ctx.reply(
+        `${EMOJI.ERROR} Название города слишком короткое.\n` +
+        `Пожалуйста, введите корректное название города.`
       );
-      return;
+      ctx.session.messageIds!.push(errorMsg.message_id);
+      return registrationConversation(conversation, ctx);
     }
-    
-    // Build city keyboard
-    const cityKeyboard = new InlineKeyboard();
-    const popularCities = cities.slice(0, 12); // First 12 popular cities
-    
-    popularCities.forEach((city, index) => {
-      cityKeyboard.text(city.name, `city_${city.id}`);
-      if ((index + 1) % 3 === 0) {
-        cityKeyboard.row();
-      }
-    });
-    
-    cityKeyboard.row();
-    cityKeyboard.text(`${EMOJI.SEARCH} Другой город`, 'city_other');
-    
-    await ctx.api.editMessageText(
-      ctx.chat!.id,
-      cityMsg.message_id,
-      `${EMOJI.LOCATION} <b>Шаг 4/5: Город</b>\n\n` +
-      `Выберите ваш город из списка:`,
-      {
-        reply_markup: cityKeyboard,
-        parse_mode: 'HTML'
-      }
-    );
-    
-    const cityCtx = await conversation.waitForCallbackQuery(/^city_/);
-    await cityCtx.answerCallbackQuery();
-    
-    let cityId: number;
-    let cityName: string;
-    
-    if (cityCtx.callbackQuery.data === 'city_other') {
-      // Manual city input
-      await ctx.api.editMessageText(
-        ctx.chat!.id,
-        cityMsg.message_id,
-        `${EMOJI.LOCATION} <b>Шаг 4/5: Город</b>\n\n` +
-        `Введите название вашего города:`,
-        { parse_mode: 'HTML' }
-      );
-      
-      const cityInput = await conversation.form.text();
-      
-      // Search for city
-      const allCities = await apiClient.getCities('RU');
-      const foundCity = allCities.find(c => 
-        c.name.toLowerCase() === cityInput.toLowerCase()
-      );
-      
-      if (!foundCity) {
-        await ctx.reply(
-          `${EMOJI.WARNING} Город "${cityInput}" не найден в базе.\n` +
-          `Мы добавим его позже. А пока выберите ближайший крупный город.`
-        );
-        return registrationConversation(conversation, ctx);
-      }
-      
-      cityId = foundCity.id;
-      cityName = foundCity.name;
-    } else {
-      cityId = parseInt(cityCtx.callbackQuery.data.replace('city_', ''));
-      cityName = popularCities.find(c => c.id === cityId)?.name || '';
-    }
-    
-    ctx.session.registrationData.cityId = cityId;
+
+    ctx.session.registrationData.cityId = 1; // Temporary ID
     ctx.session.registrationData.cityName = cityName;
     await cleanup();
     
@@ -218,8 +158,9 @@ export async function registrationConversation(
       `<i>Например: ул. Ленина, д. 10, кв. 25</i>`
     );
     ctx.session.messageIds = [addressMsg.message_id];
-    
-    const address = await conversation.form.text();
+
+    const addressCtx = await conversation.wait();
+    const address = addressCtx.message?.text || '';
     
     if (address.length < 10) {
       const errorMsg = await ctx.reply(
@@ -255,8 +196,9 @@ export async function registrationConversation(
         `${EMOJI.STAR} Введите реферальный код:`,
         { parse_mode: 'HTML' }
       );
-      
-      const refCode = await conversation.form.text();
+
+      const refCodeCtx = await conversation.wait();
+      const refCode = refCodeCtx.message?.text || '';
       ctx.session.registrationData.referralCode = refCode.toUpperCase();
     }
     

@@ -15,8 +15,8 @@ export function initializeWebSocketHandlers() {
         userId,
         `${EMOJI.PACKAGE} <b>Статус заказа изменен!</b>\n\n` +
         `Заказ: #${orderId}\n` +
-        `Старый статус: ${ORDER_STATUS_LABELS[oldStatus]}\n` +
-        `Новый статус: ${ORDER_STATUS_LABELS[newStatus]}\n\n` +
+        `Старый статус: ${ORDER_STATUS_LABELS[oldStatus as keyof typeof ORDER_STATUS_LABELS]}\n` +
+        `Новый статус: ${ORDER_STATUS_LABELS[newStatus as keyof typeof ORDER_STATUS_LABELS]}\n\n` +
         `Подробности: /orders`
       );
       
@@ -45,17 +45,42 @@ export function initializeWebSocketHandlers() {
   // Обработка массовых рассылок
   wsClient.on('broadcast:message', async (data) => {
     try {
-      const { telegramId, message } = data;
-      
-      await bot.api.sendMessage(
-        telegramId,
-        `${EMOJI.INFO} <b>Уведомление</b>\n\n${message}`
-      );
+      const { users, message } = data;
+
+      // Отправляем каждому пользователю
+      for (const user of users) {
+        try {
+          await bot.api.sendMessage(
+            user.telegramId,
+            `${EMOJI.INFO} <b>Уведомление</b>\n\n${message}`
+          );
+        } catch (error) {
+          logger.error(`Failed to send broadcast to user ${user.userId}:`, error);
+        }
+      }
+
+      logger.info(`Broadcast sent to ${users.length} users`);
     } catch (error) {
       logger.error('Failed to send broadcast message:', error);
     }
   });
-  
+
+  // Обработка сообщения от админа пользователю
+  wsClient.on('admin:message', async (data) => {
+    try {
+      const { telegramId, message } = data;
+
+      await bot.api.sendMessage(
+        telegramId,
+        `${EMOJI.INFO} <b>Сообщение от администратора</b>\n\n${message}`
+      );
+
+      logger.info(`Admin message sent to user ${telegramId}`);
+    } catch (error) {
+      logger.error(`Failed to send admin message:`, error);
+    }
+  });
+
   // Обработка оплаченных заказов
   wsClient.on('order:paid', async (data) => {
     try {

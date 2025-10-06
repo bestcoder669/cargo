@@ -3,17 +3,8 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "composite": false,
-    "paths": {
-      "@cargoexpress/prisma": ["../../libs/prisma/src"],
-      "@cargoexpress/shared": ["../../libs/shared/src"],
-      "@/*": ["./src/*"]
-    }
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"],
-  "references": [
-    { "path": "../../libs/prisma" },
-    { "path": "../../libs/shared" }
-  ]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }

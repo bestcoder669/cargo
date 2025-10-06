@@ -4,25 +4,27 @@ import { ErrorHandler } from 'grammy';
 import { MyContext } from '../types';
 import { logger } from '../logger';
 import { EMOJI } from '@cargoexpress/shared';
+import { apiClient } from '../api/client';
 
 export const errorHandler: ErrorHandler<MyContext> = async (err) => {
   const { ctx, error } = err;
-  
+  const err_typed = error as Error;
+
   logger.error('Bot error:', {
-    error: error.message,
-    stack: error.stack,
+    error: err_typed.message,
+    stack: err_typed.stack,
     update: ctx.update,
     userId: ctx.from?.id,
     username: ctx.from?.username
   });
-  
+
   // Notify user about error
   try {
     if (ctx.callbackQuery) {
-      await ctx.answerCallbackQuery(
-        'Произошла ошибка. Попробуйте еще раз.',
-        { show_alert: true }
-      );
+      await ctx.answerCallbackQuery({
+        text: 'Произошла ошибка. Попробуйте еще раз.',
+        show_alert: true
+      });
     } else {
       await ctx.reply(
         `${EMOJI.ERROR} Произошла ошибка.\n` +
@@ -32,17 +34,17 @@ export const errorHandler: ErrorHandler<MyContext> = async (err) => {
   } catch (replyError) {
     logger.error('Failed to send error message:', replyError);
   }
-  
+
   // Report to monitoring service
   if (process.env.NODE_ENV === 'production') {
     try {
       await apiClient.reportError({
-        message: error.message,
-        stack: error.stack,
+        message: err_typed.message,
+        stack: err_typed.stack,
         context: {
           userId: ctx.from?.id,
           username: ctx.from?.username,
-          updateType: ctx.updateType,
+          updateType: ctx.update.update_id.toString(),
           text: ctx.message?.text,
           callbackData: ctx.callbackQuery?.data
         }

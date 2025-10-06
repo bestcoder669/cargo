@@ -6,13 +6,13 @@ import { logger } from '../logger';
 
 export async function loggerMiddleware(ctx: MyContext, next: NextFunction) {
   const start = Date.now();
-  
+
   try {
     // Log incoming update
-    const updateType = ctx.updateType;
+    const updateType = ctx.update.update_id.toString();
     const userId = ctx.from?.id;
     const username = ctx.from?.username;
-    
+
     logger.debug(`[${updateType}] from ${userId} (@${username})`);
     
     if (ctx.message?.text) {

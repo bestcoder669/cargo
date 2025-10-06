@@ -1,16 +1,17 @@
 // ==================== apps/bot/src/modules/admin/admin.conversation.ts ====================
 
-import { MyContext, MyConversation } from '../../core/types';
+import { Conversation } from '@grammyjs/conversations';
+import { MyContext } from '../../core/types';
 import { apiClient } from '../../core/api/client';
 import { InlineKeyboard } from 'grammy';
-import { EMOJI, OrderStatus } from '@cargoexpress/shared';
+import { EMOJI, OrderStatus, FormatUtils, ORDER_STATUS_LABELS } from '@cargoexpress/shared';
 import { logger } from '../../core/logger';
-import { isAdmin } from './admin.handlers';
+import { isAdmin } from './admin.handler';
 
 // ==================== СКАНЕР В БОТЕ ====================
 
 export async function adminScannerConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   try {
@@ -102,12 +103,15 @@ export async function adminScannerConversation(
     // Завершение сессии
     await apiClient.endScannerSession(session.id);
     
+    const backKeyboard = new InlineKeyboard()
+      .text('⬅️ Назад в админку', 'admin');
+
     await ctx.reply(
       `${EMOJI.SUCCESS} <b>Сессия завершена!</b>\n\n` +
       `✅ Успешно: ${scannedCount}\n` +
       `❌ Ошибок: ${errorCount}\n` +
       `⏱ Всего: ${scannedCount + errorCount}`,
-      { reply_markup: mainAdminKeyboard }
+      { reply_markup: backKeyboard }
     );
     
   } catch (error) {
@@ -119,7 +123,7 @@ export async function adminScannerConversation(
 // ==================== РАССЫЛКА ====================
 
 export async function adminBroadcastConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   try {
@@ -216,7 +220,7 @@ export async function adminBroadcastConversation(
 // ==================== ПОИСК ПОЛЬЗОВАТЕЛЯ ====================
 
 export async function adminUserSearchConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   try {
@@ -269,18 +273,23 @@ export async function adminUserSearchConversation(
 // ==================== ИЗМЕНЕНИЕ БАЛАНСА ====================
 
 export async function adminUserBalanceConversation(
-  conversation: MyConversation,
-  ctx: MyContext,
-  userId: number
+  conversation: Conversation<MyContext>,
+  ctx: MyContext
 ) {
   try {
     if (!isAdmin(ctx.from!.id)) return;
-    
+
+    const userId = ctx.session.tempData?.userId;
+    if (!userId) {
+      await ctx.reply('❌ Ошибка: пользователь не найден');
+      return;
+    }
+
     const operationKeyboard = new InlineKeyboard()
       .text('➕ Пополнить', 'balance_add')
       .text('➖ Списать', 'balance_subtract').row()
       .text('❌ Отмена', 'cancel');
-    
+
     await ctx.reply(
       `💰 <b>Изменение баланса пользователя #${userId}</b>\n\n` +
       `Выберите операцию:`,
@@ -332,7 +341,7 @@ export async function adminUserBalanceConversation(
 }
 
 export async function adminUserBanConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   const userId = ctx.session.tempData?.userId;
@@ -341,8 +350,9 @@ export async function adminUserBanConversation(
     `${EMOJI.WARNING} <b>Блокировка пользователя #${userId}</b>\n\n` +
     `Укажите причину блокировки:`
   );
-  
-  const reason = await conversation.form.text();
+
+  const reasonCtx = await conversation.wait();
+  const reason = reasonCtx.message?.text;
   
   const confirmKeyboard = new InlineKeyboard()
     .text('✅ Заблокировать', 'confirm_ban')
@@ -385,7 +395,7 @@ export async function adminUserBanConversation(
 }
 
 export async function adminUserBonusConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   const userId = ctx.session.tempData?.userId;
@@ -394,17 +404,19 @@ export async function adminUserBonusConversation(
     `${EMOJI.STAR} <b>Начисление бонусов пользователю #${userId}</b>\n\n` +
     `Введите сумму бонусов в рублях:`
   );
-  
-  const amountText = await conversation.form.text();
+
+  const amountCtx = await conversation.wait();
+  const amountText = amountCtx.message?.text || '0';
   const amount = parseFloat(amountText);
-  
+
   if (isNaN(amount) || amount <= 0) {
     await ctx.reply('❌ Неверная сумма');
     return;
   }
-  
+
   await ctx.reply('Укажите причину начисления:');
-  const reason = await conversation.form.text();
+  const reasonCtx = await conversation.wait();
+  const reason = reasonCtx.message?.text || '';
   
   await apiClient.updateUser(userId, {
     bonusBalance: { increment: amount }
@@ -430,32 +442,210 @@ export async function adminUserBonusConversation(
 }
 
 export async function adminMessageUserConversation(
-  conversation: MyConversation,
+  conversation: Conversation<MyContext>,
   ctx: MyContext
 ) {
   const userId = ctx.session.tempData?.userId;
-  
+
   await ctx.reply(
     `${EMOJI.SUPPORT} <b>Сообщение пользователю #${userId}</b>\n\n` +
     `Введите текст сообщения:`
   );
-  
-  const message = await conversation.form.text();
-  
+
+  const messageCtx = await conversation.wait();
+  const message = messageCtx.message?.text;
+
+  if (!message) {
+    await ctx.reply('❌ Сообщение не может быть пустым');
+    return;
+  }
+
   try {
-    await ctx.api.sendMessage(
-      userId,
-      `${EMOJI.INFO} <b>Сообщение от администрации</b>\n\n${message}`
-    );
-    
+    await apiClient.sendMessageToUser(userId, message);
+
     await ctx.reply(
       `${EMOJI.SUCCESS} Сообщение отправлено пользователю #${userId}`
     );
   } catch (error) {
+    logger.error('Send message to user error:', error);
     await ctx.reply('❌ Не удалось отправить сообщение');
   }
 }
 
+
+// ==================== ПОИСК ЗАКАЗА ====================
+
+export async function adminOrderSearchConversation(
+  conversation: Conversation<MyContext>,
+  ctx: MyContext
+) {
+  try {
+    if (!isAdmin(ctx.from!.id)) return;
+
+    await ctx.reply(
+      `🔍 <b>Поиск заказа</b>\n\n` +
+      `Введите трек-номер заказа:`
+    );
+
+    const searchCtx = await conversation.wait();
+    const trackNumber = searchCtx.message?.text;
+
+    if (!trackNumber) {
+      await ctx.reply('❌ Трек-номер не может быть пустым');
+      return;
+    }
+
+    try {
+      const order = await apiClient.findOrderByTrack(trackNumber);
+
+      if (!order) {
+        await ctx.reply(`❌ Заказ с трек-номером ${trackNumber} не найден`);
+        return;
+      }
+
+      const keyboard = new InlineKeyboard()
+        .text('📝 Изменить статус', `admin_order_status_${order.id}`)
+        .text('💬 Написать клиенту', `admin_message_user_${order.userId}`).row()
+        .text('❌ Отменить заказ', `admin_order_cancel_${order.id}`).row()
+        .text('⬅️ Назад', 'admin_orders');
+
+      await ctx.reply(
+        `${EMOJI.PACKAGE} <b>Заказ #${order.id}</b>\n\n` +
+        `• Статус: ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}\n` +
+        `• Трек: <code>${order.trackNumber}</code>\n` +
+        `• Клиент: ${order.user.firstName} (ID: ${order.userId})\n` +
+        `• Создан: ${FormatUtils.formatDate(order.createdAt)}\n` +
+        `• Стоимость: ${FormatUtils.formatMoney(order.totalAmount || 0)}`,
+        { reply_markup: keyboard }
+      );
+    } catch (error) {
+      logger.error('Order search error:', error);
+      await ctx.reply('❌ Ошибка поиска заказа');
+    }
+  } catch (error) {
+    logger.error('Order search conversation error:', error);
+    await ctx.reply('❌ Ошибка поиска');
+  }
+}
+
+// ==================== ОТВЕТ В ПОДДЕРЖКУ ====================
+
+export async function adminSupportReplyConversation(
+  conversation: Conversation<MyContext>,
+  ctx: MyContext
+) {
+  try {
+    if (!isAdmin(ctx.from!.id)) return;
+
+    const chatId = ctx.session.tempData?.chatId;
+    if (!chatId) {
+      await ctx.reply('❌ Чат не найден');
+      return;
+    }
+
+    await ctx.reply(
+      `💬 <b>Ответ в чат поддержки #${chatId}</b>\n\n` +
+      `Введите ваш ответ:`
+    );
+
+    const messageCtx = await conversation.wait();
+    const message = messageCtx.message?.text;
+
+    if (!message) {
+      await ctx.reply('❌ Сообщение не может быть пустым');
+      return;
+    }
+
+    try {
+      await apiClient.sendSupportMessage({
+        chatId,
+        message,
+        fromAdmin: true,
+        adminId: ctx.from!.id
+      });
+
+      await ctx.reply(
+        `${EMOJI.SUCCESS} Сообщение отправлено в чат #${chatId}`
+      );
+    } catch (error) {
+      logger.error('Support reply error:', error);
+      await ctx.reply('❌ Не удалось отправить сообщение');
+    }
+  } catch (error) {
+    logger.error('Support reply conversation error:', error);
+    await ctx.reply('❌ Ошибка отправки');
+  }
+}
+
+// ==================== МАССОВОЕ ОБНОВЛЕНИЕ СКАНЕРА ====================
+
+export async function adminScannerBulkConversation(
+  conversation: Conversation<MyContext>,
+  ctx: MyContext
+) {
+  try {
+    if (!isAdmin(ctx.from!.id)) return;
+
+    await ctx.reply(
+      `📋 <b>Массовое обновление статусов</b>\n\n` +
+      `Эта функция позволяет загрузить список трек-номеров и обновить их статусы.\n\n` +
+      `Отправьте файл .txt или .csv с трек-номерами (каждый на новой строке):`
+    );
+
+    const fileCtx = await conversation.wait();
+
+    if (!fileCtx.message?.document) {
+      await ctx.reply('❌ Необходимо отправить файл');
+      return;
+    }
+
+    // Выбор статуса
+    const statusKeyboard = new InlineKeyboard();
+    Object.values(OrderStatus).forEach(status => {
+      statusKeyboard.text(
+        ORDER_STATUS_LABELS[status],
+        `bulk_status_${status}`
+      ).row();
+    });
+
+    await ctx.reply(
+      `Выберите статус для всех заказов:`,
+      { reply_markup: statusKeyboard }
+    );
+
+    const statusCtx = await conversation.waitForCallbackQuery(/^bulk_status_/);
+    const targetStatus = statusCtx.callbackQuery.data.replace('bulk_status_', '') as OrderStatus;
+    await statusCtx.answerCallbackQuery();
+
+    await ctx.reply(`${EMOJI.LOADING} Обрабатываю файл...`);
+
+    try {
+      // Загружаем файл
+      const file = await ctx.api.getFile(fileCtx.message.document.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${ctx.api.token}/${file.file_path}`;
+
+      // Отправляем на обработку
+      const result = await apiClient.bulkUpdateOrders({
+        fileUrl,
+        targetStatus,
+        adminId: ctx.from!.id
+      });
+
+      await ctx.reply(
+        `${EMOJI.SUCCESS} <b>Массовое обновление завершено!</b>\n\n` +
+        `✅ Обновлено: ${result.success}\n` +
+        `❌ Ошибок: ${result.failed}\n` +
+        `⏱ Всего обработано: ${result.total}`
+      );
+    } catch (error) {
+      logger.error('Bulk update error:', error);
+      await ctx.reply('❌ Ошибка обработки файла');
+    }
+  } catch (error) {
+    logger.error('Scanner bulk conversation error:', error);
+    await ctx.reply('❌ Ошибка массового обновления');
+  }
+}
 
 function getAudienceName(audience: string): string {
   const names = {

@@ -4,6 +4,7 @@ import { NextFunction } from 'grammy';
 import { MyContext } from '../types';
 import { apiClient } from '../api/client';
 import { logger } from '../logger';
+import { config } from '../config';
 
 export async function authMiddleware(ctx: MyContext, next: NextFunction) {
   try {
@@ -26,7 +27,8 @@ export async function authMiddleware(ctx: MyContext, next: NextFunction) {
           logger.debug(`User ${user.id} loaded from database`);
         }
       } catch (error) {
-        logger.error('Failed to load user:', error);
+        const err = error as Error;
+        logger.error('Failed to load user:', err.message);
       }
     }
     
@@ -49,7 +51,8 @@ export async function authMiddleware(ctx: MyContext, next: NextFunction) {
     return next();
     
   } catch (error) {
-    logger.error('Auth middleware error:', error);
+    const err = error as Error;
+    logger.error('Auth middleware error:', err.message);
     return next();
   }
 }

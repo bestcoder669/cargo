@@ -7,8 +7,9 @@ import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
-import websocket from '@fastify/websocket';
+// import websocket from '@fastify/websocket';
 import { config } from './core/config';
+import { redis } from './core/redis';
 import { errorHandler } from './core/plugins/error-handler';
 import { authPlugin } from './core/plugins/auth';
 import { registerModules } from './modules';
@@ -46,13 +47,13 @@ export async function initializeApp(app: FastifyInstance) {
     redis: redis
   });
   
-  // WebSocket support
-  await app.register(websocket, {
-    options: {
-      maxPayload: 1048576, // 1MB
-      clientTracking: true
-    }
-  });
+  // WebSocket support (Socket.io is initialized separately in main.ts)
+  // await app.register(websocket, {
+  //   options: {
+  //     maxPayload: 1048576, // 1MB
+  //     clientTracking: true
+  //   }
+  // });
   
   // API Documentation
   if (config.NODE_ENV !== 'production') {
@@ -92,10 +93,39 @@ export async function initializeApp(app: FastifyInstance) {
   // Custom plugins
   await app.register(errorHandler);
   await app.register(authPlugin);
-  
+
+  // Global auth middleware for all routes except health and docs
+  app.addHook('onRequest', async (request, reply) => {
+    // Skip auth for health check and docs
+    if (request.url.startsWith('/health') ||
+        request.url.startsWith('/docs') ||
+        request.url.startsWith('/socket.io')) {
+      return;
+    }
+
+    // Apply authentication
+    const botToken = request.headers['x-bot-token'] as string;
+    if (botToken && botToken === config.BOT_TOKEN) {
+      (request as any).user = {
+        id: 0,
+        adminId: null,
+        role: 'bot'
+      };
+      return;
+    }
+
+    // For now, allow all requests with default user
+    // TODO: Implement proper JWT auth
+    (request as any).user = {
+      id: 1,
+      adminId: null,
+      role: 'user'
+    };
+  });
+
   // Health check
   app.get('/health', healthCheckRoute);
-  
+
   // Register all modules
   await registerModules(app);
   

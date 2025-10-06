@@ -1,5 +1,8 @@
 // ==================== apps/api/src/modules/orders/orders.service.ts ====================
-
+import * as fs from 'fs';
+import * as path from 'path';
+import { pipeline } from 'stream/promises';
+import { config } from '../../core/config';
 import { prisma } from '@cargoexpress/prisma';
 import { 
   CreateOrderDto, 
@@ -9,7 +12,7 @@ import {
   PaymentStatus
 } from '@cargoexpress/shared';
 import { logger } from '../../core/logger';
-import { notificationService } from '../notifications/notification.service';
+import { notificationService } from '../notifications/notifications.service';
 
 class OrdersService {
   async createOrder(data: CreateOrderDto & { userId: number }) {
@@ -122,17 +125,18 @@ class OrdersService {
   }
   
   async getOrders(filters: any) {
-    const { 
-      status, 
-      type, 
-      userId, 
+    const {
+      status,
+      type,
+      userId,
       warehouseId,
       searchQuery,
-      page = 1,
-      limit = 20,
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = filters;
+
+    const page = parseInt(filters.page) || 1;
+    const limit = parseInt(filters.limit) || 20;
     
     const where: any = {};
     
@@ -412,11 +416,11 @@ class OrdersService {
     return {
       total,
       pending: statusCounts.pending || 0,
-      processing: (statusCounts.processing || 0) + 
-                  (statusCounts.purchasing || 0) + 
+      processing: (statusCounts.processing || 0) +
+                  (statusCounts.purchasing || 0) +
                   (statusCounts.packing || 0),
-      shipped: (statusCounts.shipped || 0) + 
-               (statusCounts.in_transit || 0) + 
+      shipped: (statusCounts.shipped || 0) +
+               (statusCounts.in_transit || 0) +
                (statusCounts.customs_clearance || 0),
       delivered: statusCounts.delivered || 0,
       cancelled: statusCounts.cancelled || 0,
@@ -424,7 +428,7 @@ class OrdersService {
       averageDeliveryDays: avgDeliveryDays[0]?.avg_days || 0
     };
   }
-}
+
   private async createRefund(order: any) {
     // Create refund transaction
     await prisma.transaction.create({

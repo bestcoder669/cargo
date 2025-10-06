@@ -144,9 +144,9 @@ export async function handleAdminOrders(ctx: MyContext) {
       .text('❌ Проблемные', 'admin_orders_problem').row();
     
     // Последние заказы
-    orders.data.slice(0, 5).forEach(order => {
+    orders.data.slice(0, 5).forEach((order: any) => {
       keyboard.text(
-        `#${order.id} - ${order.user.firstName} - ${ORDER_STATUS_LABELS[order.status]}`,
+        `#${order.id} - ${order.user.firstName} - ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}`,
         `admin_order_${order.id}`
       ).row();
     });
@@ -189,9 +189,9 @@ export async function handleOrderDetails(ctx: MyContext) {
     
     await ctx.editMessageText(
       `${EMOJI.PACKAGE} <b>Заказ #${order.id}</b>\n\n` +
-      
+
       `<b>Информация:</b>\n` +
-      `• Статус: ${ORDER_STATUS_LABELS[order.status]}\n` +
+      `• Статус: ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}\n` +
       `• Тип: ${order.type === 'SHIPPING' ? '✈️ Доставка' : '🛍 Выкуп'}\n` +
       `• Трек: <code>${order.trackNumber}</code>\n` +
       `• Создан: ${FormatUtils.formatDate(order.createdAt)}\n\n` +
@@ -253,44 +253,46 @@ export async function handleOrderStatusChange(ctx: MyContext) {
 export async function handleAdminUsers(ctx: MyContext) {
   try {
     if (!isAdmin(ctx.from?.id!)) return;
-    
+
     await ctx.answerCallbackQuery();
-    
+
     const users = await apiClient.getUsers({
       limit: 10,
       sortBy: 'createdAt',
       sortOrder: 'desc'
     });
-    
+
     const keyboard = new InlineKeyboard();
-    
+
     // Быстрые действия
     keyboard
       .text('🔍 Поиск пользователя', 'admin_user_search')
       .text('📊 Статистика пользователей', 'admin_users_stats').row()
       .text('🎁 Топ клиентов', 'admin_users_top')
       .text('⛔ Заблокированные', 'admin_users_banned').row();
-    
-    // Последние пользователи
-    users.data.slice(0, 5).forEach(user => {
-      keyboard.text(
-        `#${user.id} - ${user.firstName} - ${FormatUtils.formatMoney(user.totalSpent || 0)}`,
-        `admin_user_${user.id}`
-      ).row();
-    });
-    
+
+    // Последние пользователи - кнопки
+    if (users.data && users.data.length > 0) {
+      users.data.slice(0, 5).forEach((user: any) => {
+        keyboard.text(
+          `#${user.id} - ${user.firstName} - ${FormatUtils.formatMoney(user.totalSpent || 0)}`,
+          `admin_user_${user.id}`
+        ).row();
+      });
+    }
+
     keyboard
       .text('📋 Все пользователи', 'admin_users_all').row()
       .text('⬅️ Назад', 'admin');
-    
+
     await ctx.editMessageText(
       `${EMOJI.PROFILE} <b>Управление пользователями</b>\n\n` +
-      `Всего пользователей: ${users.meta.total}\n` +
-      `Новых за сегодня: ${users.meta.todayNew}\n\n` +
+      `Всего пользователей: ${users.meta?.total || 0}\n` +
+      `Новых за сегодня: ${users.meta?.todayNew || 0}\n\n` +
       `Последние 5 пользователей:`,
       { reply_markup: keyboard }
     );
-    
+
   } catch (error) {
     logger.error('Admin users error:', error);
     await ctx.answerCallbackQuery('❌ Ошибка');
@@ -326,7 +328,7 @@ export async function handleUserDetails(ctx: MyContext) {
     
     await ctx.editMessageText(
       `${EMOJI.PROFILE} <b>Пользователь #${user.id}</b>\n\n` +
-      
+
       `<b>Информация:</b>\n` +
       `• Имя: ${user.firstName} ${user.lastName || ''}\n` +
       `• Username: @${user.username || 'не указан'}\n` +
@@ -334,19 +336,19 @@ export async function handleUserDetails(ctx: MyContext) {
       `• Email: ${user.email}\n` +
       `• Город: ${user.city?.name || 'Не указан'}\n` +
       `• Telegram ID: <code>${user.telegramId}</code>\n\n` +
-      
+
       `<b>Финансы:</b>\n` +
       `• Баланс: ${FormatUtils.formatMoney(user.balance)}\n` +
       `• Бонусы: ${FormatUtils.formatMoney(user.bonusBalance)}\n` +
       `• Потрачено: ${FormatUtils.formatMoney(user.totalSpent || 0)}\n\n` +
-      
+
       `<b>Активность:</b>\n` +
-      `• Заказов: ${user.ordersCount}\n` +
+      `• Заказов: ${user.ordersCount || user._count?.orders || 0}\n` +
       `• Рефералов: ${user.referrals?.length || 0}\n` +
       `• Реф. код: <code>${user.referralCode}</code>\n` +
       `• Регистрация: ${FormatUtils.formatDate(user.createdAt)}\n` +
       `• Статус: ${user.isBanned ? '⛔ Заблокирован' : '✅ Активен'}\n\n` +
-      
+
       `<b>Действия:</b>`,
       { reply_markup: keyboard }
     );
@@ -362,23 +364,22 @@ export async function handleUserDetails(ctx: MyContext) {
 export async function handleAdminScanner(ctx: MyContext) {
   try {
     if (!isAdmin(ctx.from?.id!)) return;
-    
+
     await ctx.answerCallbackQuery();
-    
+
     const sessions = await apiClient.getScannerSessions({
-      adminId: ctx.from.id,
       limit: 5
     });
-    
+
     const keyboard = new InlineKeyboard()
       .text('🚀 Начать сканирование', 'admin_scanner_start').row()
       .text('📋 Массовое обновление', 'admin_scanner_bulk').row()
       .text('📊 Статистика сканирования', 'admin_scanner_stats').row();
-    
+
     // Последние сессии
     if (sessions.data.length > 0) {
       keyboard.text('📜 Последние сессии:', 'noop').row();
-      sessions.data.slice(0, 3).forEach(session => {
+      sessions.data.slice(0, 3).forEach((session: any) => {
         keyboard.text(
           `${FormatUtils.formatDate(session.startedAt)} - ${session.totalScanned} шт`,
           `admin_scanner_session_${session.id}`
@@ -416,51 +417,58 @@ export async function handleAdminScanner(ctx: MyContext) {
 export async function handleAdminSupport(ctx: MyContext) {
   try {
     if (!isAdmin(ctx.from?.id!)) return;
-    
+
     await ctx.answerCallbackQuery();
-    
+
     const chats = await apiClient.getSupportChats({
       status: 'WAITING',
       limit: 10
     });
-    
+
     const keyboard = new InlineKeyboard();
-    
+
+    // Безопасное получение значений
+    const waiting = chats.meta?.waiting || 0;
+    const inProgress = chats.meta?.inProgress || 0;
+    const resolved = chats.meta?.resolved || 0;
+    const avgResponseTime = chats.meta?.avgResponseTime || 0;
+    const rating = chats.meta?.rating || 0;
+
     // Статистика
     keyboard
-      .text(`⏳ Ожидают: ${chats.meta.waiting}`, 'admin_support_waiting')
-      .text(`💬 В работе: ${chats.meta.inProgress}`, 'admin_support_progress').row()
-      .text(`✅ Решены: ${chats.meta.resolved}`, 'admin_support_resolved').row();
-    
+      .text(`⏳ Ожидают: ${waiting}`, 'admin_support_waiting')
+      .text(`💬 В работе: ${inProgress}`, 'admin_support_progress').row()
+      .text(`✅ Решены: ${resolved}`, 'admin_support_resolved').row();
+
     // Активные чаты
-    if (chats.data.length > 0) {
+    if (chats.data && chats.data.length > 0) {
       keyboard.text('💬 Активные чаты:', 'noop').row();
-      chats.data.slice(0, 5).forEach(chat => {
+      chats.data.slice(0, 5).forEach((chat: any) => {
         const emoji = chat.priority === 2 ? '🔴' : chat.priority === 1 ? '🟡' : '⚪';
         keyboard.text(
-          `${emoji} #${chat.id} - ${chat.user.firstName} - ${chat.messages.length} сообщ.`,
+          `${emoji} #${chat.id} - ${chat.user?.firstName || 'User'} - ${chat.messages?.length || 0} сообщ.`,
           `admin_support_chat_${chat.id}`
         ).row();
       });
     }
-    
+
     keyboard
       .text('📊 Статистика поддержки', 'admin_support_stats').row()
       .text('⬅️ Назад', 'admin');
-    
+
     await ctx.editMessageText(
       `${EMOJI.SUPPORT} <b>Управление поддержкой</b>\n\n` +
-      
+
       `<b>Текущая ситуация:</b>\n` +
-      `• Ожидают ответа: ${chats.meta.waiting}\n` +
-      `• В работе: ${chats.meta.inProgress}\n` +
-      `• Среднее время ответа: ${chats.meta.avgResponseTime} мин\n` +
-      `• Рейтинг: ${chats.meta.rating}/5.0\n\n` +
-      
+      `• Ожидают ответа: ${waiting}\n` +
+      `• В работе: ${inProgress}\n` +
+      `• Среднее время ответа: ${avgResponseTime} мин\n` +
+      `• Рейтинг: ${rating.toFixed(1)}/5.0\n\n` +
+
       `Выберите чат для ответа:`,
       { reply_markup: keyboard }
     );
-    
+
   } catch (error) {
     logger.error('Admin support error:', error);
     await ctx.answerCallbackQuery('❌ Ошибка');
@@ -538,42 +546,58 @@ export async function handleAdminFinance(ctx: MyContext) {
 export async function handleAdminToken(ctx: MyContext) {
   try {
     if (!isAdmin(ctx.from?.id!)) {
-      await ctx.answerCallbackQuery('Доступ запрещен', { show_alert: true });
+      await ctx.answerCallbackQuery({ text: 'Доступ запрещен', show_alert: true });
       return;
     }
-    
+
     await ctx.answerCallbackQuery();
-    
+
     const token = await apiClient.generateAdminToken(ctx.from!.id);
     const adminUrl = `${config.ADMIN_URL}/auth/token/${token}`;
-    
-    await ctx.reply(
-      `${EMOJI.SETTINGS} <b>Вход в админ-панель</b>\n\n` +
-      
-      `🔗 <b>Ссылка для входа:</b>\n` +
-      `<code>${adminUrl}</code>\n\n` +
-      
-      `🔑 <b>Токен действителен:</b> 15 минут\n` +
-      `🔐 <b>Одноразовый вход</b>\n\n` +
-      
-      `${EMOJI.WARNING} <b>Безопасность:</b>\n` +
-      `• Не передавайте ссылку третьим лицам\n` +
-      `• После входа ссылка станет недействительной\n` +
-      `• Все действия логируются`,
-      {
-        disable_web_page_preview: true,
-        reply_markup: new InlineKeyboard()
-          .url('🌐 Открыть панель', adminUrl)
-          .row()
-          .text('⬅️ Назад', 'admin')
-      }
-    );
-    
+
+    // Check if URL is localhost (Telegram doesn't allow localhost URLs in buttons)
+    const isLocalhost = config.ADMIN_URL.includes('localhost') || config.ADMIN_URL.includes('127.0.0.1');
+
+    const keyboard = new InlineKeyboard();
+
+    if (!isLocalhost) {
+      keyboard.url('🌐 Открыть панель', adminUrl).row();
+    }
+
+    keyboard.text('⬅️ Назад', 'admin');
+
+    let message = `${EMOJI.SETTINGS} <b>Вход в админ-панель</b>\n\n`;
+
+    if (isLocalhost) {
+      message += `⚠️ <b>Скопируйте ссылку для входа:</b>\n` +
+                 `<code>${adminUrl}</code>\n\n` +
+                 `🔑 <b>Токен действителен:</b> 15 минут\n` +
+                 `🔐 <b>Одноразовый вход</b>\n\n` +
+                 `${EMOJI.WARNING} <b>Безопасность:</b>\n` +
+                 `• Не передавайте ссылку третьим лицам\n` +
+                 `• После входа ссылка станет недействительной\n` +
+                 `• Все действия логируются`;
+    } else {
+      message += `🔗 <b>Ссылка для входа:</b>\n` +
+                 `<code>${adminUrl}</code>\n\n` +
+                 `🔑 <b>Токен действителен:</b> 15 минут\n` +
+                 `🔐 <b>Одноразовый вход</b>\n\n` +
+                 `${EMOJI.WARNING} <b>Безопасность:</b>\n` +
+                 `• Не передавайте ссылку третьим лицам\n` +
+                 `• После входа ссылка станет недействительной\n` +
+                 `• Все действия логируются`;
+    }
+
+    await ctx.reply(message, {
+      link_preview_options: { is_disabled: true },
+      reply_markup: keyboard
+    });
+
     logger.info(`Admin token generated for ${ctx.from!.id}`);
     
   } catch (error) {
     logger.error('Admin token generation error:', error);
-    await ctx.answerCallbackQuery('Ошибка генерации токена', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка генерации токена', show_alert: true });
   }
 }
 
@@ -581,11 +605,11 @@ export async function handleOrderCancel(ctx: MyContext) {
   try {
     const orderId = parseInt(ctx.match![1]);
     await ctx.answerCallbackQuery();
-    
+
     const confirmKeyboard = new InlineKeyboard()
       .text('✅ Да, отменить', `confirm_cancel_order_${orderId}`)
       .text('❌ Нет', `admin_order_${orderId}`);
-    
+
     await ctx.editMessageText(
       `${EMOJI.WARNING} <b>Отмена заказа #${orderId}</b>\n\n` +
       `Вы уверены, что хотите отменить этот заказ?\n` +
@@ -594,17 +618,17 @@ export async function handleOrderCancel(ctx: MyContext) {
     );
   } catch (error) {
     logger.error('Order cancel error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }
 
 export async function handleConfirmCancelOrder(ctx: MyContext) {
   try {
     const orderId = parseInt(ctx.match![1]);
-    await ctx.answerCallbackQuery('Отменяю заказ...');
-    
-    const result = await apiClient.cancelOrder(orderId, 'Отменен администратором');
-    
+    await ctx.answerCallbackQuery({ text: 'Отменяю заказ...' });
+
+    await apiClient.cancelOrder(orderId, 'Отменен администратором');
+
     await ctx.editMessageText(
       `${EMOJI.SUCCESS} Заказ #${orderId} отменен.\n` +
       `Клиент получит уведомление.`,
@@ -614,10 +638,10 @@ export async function handleConfirmCancelOrder(ctx: MyContext) {
           .text('⬅️ Меню', 'admin')
       }
     );
-    
+
   } catch (error) {
     logger.error('Confirm cancel order error:', error);
-    await ctx.answerCallbackQuery('Ошибка отмены', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка отмены', show_alert: true });
   }
 }
 
@@ -625,32 +649,33 @@ export async function handleUserBan(ctx: MyContext) {
   try {
     const userId = parseInt(ctx.match![1]);
     await ctx.answerCallbackQuery();
-    
-    await ctx.conversation.enter('adminUserBan', { userId });
-    
+
+    ctx.session.tempData = { userId };
+    await ctx.conversation.enter('adminUserBan');
+
   } catch (error) {
     logger.error('User ban error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }
 
 export async function handleUserUnban(ctx: MyContext) {
   try {
     const userId = parseInt(ctx.match![1]);
-    await ctx.answerCallbackQuery('Разблокирую...');
-    
+    await ctx.answerCallbackQuery({ text: 'Разблокирую...' });
+
     await apiClient.updateUser(userId, { isBanned: false });
-    
+
     await ctx.reply(
       `${EMOJI.SUCCESS} Пользователь #${userId} разблокирован.`
     );
-    
+
     // Обновляем сообщение
     await handleUserDetails(ctx);
-    
+
   } catch (error) {
     logger.error('User unban error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }
 
@@ -658,12 +683,13 @@ export async function handleUserBalance(ctx: MyContext) {
   try {
     const userId = parseInt(ctx.match![1]);
     await ctx.answerCallbackQuery();
-    
-    await ctx.conversation.enter('adminUserBalance', { userId });
-    
+
+    ctx.session.tempData = { userId };
+    await ctx.conversation.enter('adminUserBalance');
+
   } catch (error) {
     logger.error('User balance error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }
 
@@ -671,12 +697,13 @@ export async function handleUserBonus(ctx: MyContext) {
   try {
     const userId = parseInt(ctx.match![1]);
     await ctx.answerCallbackQuery();
-    
-    await ctx.conversation.enter('adminUserBonus', { userId });
-    
+
+    ctx.session.tempData = { userId };
+    await ctx.conversation.enter('adminUserBonus');
+
   } catch (error) {
     logger.error('User bonus error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }
 
@@ -684,31 +711,31 @@ export async function handleUserOrders(ctx: MyContext) {
   try {
     const userId = parseInt(ctx.match![1]);
     await ctx.answerCallbackQuery();
-    
+
     const orders = await apiClient.getUserOrders(userId);
-    
+
     let message = `${EMOJI.PACKAGE} <b>Заказы пользователя #${userId}</b>\n\n`;
-    
+
     if (orders.length === 0) {
       message += 'У пользователя нет заказов.';
     } else {
       for (const order of orders.slice(0, 10)) {
-        message += `#${order.id} - ${ORDER_STATUS_LABELS[order.status]} - ${FormatUtils.formatMoney(order.totalAmount || 0)}\n`;
+        message += `#${order.id} - ${ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]} - ${FormatUtils.formatMoney(order.totalAmount || 0)}\n`;
       }
-      
+
       if (orders.length > 10) {
         message += `\n... и еще ${orders.length - 10} заказов`;
       }
     }
-    
+
     await ctx.reply(message, {
       reply_markup: new InlineKeyboard()
         .text('⬅️ К пользователю', `admin_user_${userId}`)
     });
-    
+
   } catch (error) {
     logger.error('User orders error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }
 
@@ -716,12 +743,13 @@ export async function handleMessageUser(ctx: MyContext) {
   try {
     const userId = parseInt(ctx.match![1]);
     await ctx.answerCallbackQuery();
-    
-    await ctx.conversation.enter('adminMessageUser', { userId });
-    
+
+    ctx.session.tempData = { userId };
+    await ctx.conversation.enter('adminMessageUser');
+
   } catch (error) {
     logger.error('Message user error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }
 
@@ -729,46 +757,46 @@ export async function handleSupportChat(ctx: MyContext) {
   try {
     const chatId = parseInt(ctx.match![1]);
     await ctx.answerCallbackQuery();
-    
+
     const chat = await apiClient.getSupportChat(chatId);
-    
+
     let message = `${EMOJI.SUPPORT} <b>Чат поддержки #${chat.id}</b>\n\n`;
     message += `<b>Пользователь:</b> ${chat.user.firstName} ${chat.user.lastName || ''}\n`;
     message += `<b>Телефон:</b> ${chat.user.phone}\n`;
     message += `<b>Тема:</b> ${chat.subject}\n`;
     message += `<b>Статус:</b> ${chat.status}\n`;
     message += `<b>Создан:</b> ${FormatUtils.formatDate(chat.createdAt)}\n\n`;
-    
+
     message += `<b>Последние сообщения:</b>\n\n`;
-    
+
     for (const msg of chat.messages.slice(-5)) {
       const emoji = msg.fromUser ? '👤' : '👨‍💼';
       message += `${emoji} ${FormatUtils.formatDate(msg.createdAt)}:\n`;
       message += `${msg.text.substring(0, 100)}${msg.text.length > 100 ? '...' : ''}\n\n`;
     }
-    
+
     const keyboard = new InlineKeyboard()
       .text('💬 Ответить', `admin_support_reply_${chatId}`)
       .text('✅ Закрыть чат', `admin_support_close_${chatId}`).row()
       .text('🔴 Высокий приоритет', `admin_support_priority_${chatId}_high`)
       .text('🟡 Средний', `admin_support_priority_${chatId}_medium`).row()
       .text('⬅️ К поддержке', 'admin_support');
-    
+
     await ctx.reply(message, { reply_markup: keyboard });
-    
+
   } catch (error) {
     logger.error('Support chat error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }
 
 export async function handleSupportClose(ctx: MyContext) {
   try {
     const chatId = parseInt(ctx.match![1]);
-    await ctx.answerCallbackQuery('Закрываю чат...');
-    
+    await ctx.answerCallbackQuery({ text: 'Закрываю чат...' });
+
     await apiClient.closeSupportChat(chatId);
-    
+
     await ctx.reply(
       `${EMOJI.SUCCESS} Чат #${chatId} закрыт.`,
       {
@@ -776,20 +804,20 @@ export async function handleSupportClose(ctx: MyContext) {
           .text('⬅️ К поддержке', 'admin_support')
       }
     );
-    
+
   } catch (error) {
     logger.error('Support close error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }
 
 export async function handleAdminSettings(ctx: MyContext) {
   try {
     if (!isSuperAdmin(ctx.from?.id!)) {
-      await ctx.answerCallbackQuery('Только для супер-админов', { show_alert: true });
+      await ctx.answerCallbackQuery({ text: 'Только для супер-админов', show_alert: true });
       return;
     }
-    
+
     await ctx.answerCallbackQuery();
     
     const keyboard = new InlineKeyboard()
@@ -809,6 +837,6 @@ export async function handleAdminSettings(ctx: MyContext) {
     
   } catch (error) {
     logger.error('Admin settings error:', error);
-    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Ошибка', show_alert: true });
   }
 }

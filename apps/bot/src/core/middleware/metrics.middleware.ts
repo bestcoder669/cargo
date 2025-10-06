@@ -16,7 +16,7 @@ export async function metricsMiddleware(ctx: MyContext, next: NextFunction) {
     wsClient.emit('bot:metrics', {
       type: 'update_processed',
       userId: ctx.from?.id,
-      updateType: ctx.updateType,
+      updateType: ctx.update.update_id.toString(),
       duration,
       success: true
     });
@@ -27,12 +27,12 @@ export async function metricsMiddleware(ctx: MyContext, next: NextFunction) {
     wsClient.emit('bot:metrics', {
       type: 'update_failed',
       userId: ctx.from?.id,
-      updateType: ctx.updateType,
+      updateType: ctx.update.update_id.toString(),
       duration,
       success: false,
-      error: error.message
+      error: (error as Error).message
     });
-    
+
     throw error;
   }
 }

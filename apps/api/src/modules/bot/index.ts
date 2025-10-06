@@ -2,12 +2,13 @@
 
 import { FastifyPluginAsync } from 'fastify';
 import { botController } from './bot.controller';
+import { config } from '../../core/config';
 
 export const botModule: FastifyPluginAsync = async (fastify) => {
   // Bot authentication middleware
   fastify.addHook('onRequest', async (request, reply) => {
     const botToken = request.headers['x-bot-token'];
-    
+
     if (botToken !== config.BOT_TOKEN) {
       reply.code(401).send({
         success: false,

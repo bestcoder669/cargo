@@ -534,3 +534,281 @@ export async function handleAdminFinance(ctx: MyContext) {
   }
 }
 
+
+export async function handleAdminToken(ctx: MyContext) {
+  try {
+    if (!isAdmin(ctx.from?.id!)) {
+      await ctx.answerCallbackQuery('Доступ запрещен', { show_alert: true });
+      return;
+    }
+    
+    await ctx.answerCallbackQuery();
+    
+    const token = await apiClient.generateAdminToken(ctx.from!.id);
+    const adminUrl = `${config.ADMIN_URL}/auth/token/${token}`;
+    
+    await ctx.reply(
+      `${EMOJI.SETTINGS} <b>Вход в админ-панель</b>\n\n` +
+      
+      `🔗 <b>Ссылка для входа:</b>\n` +
+      `<code>${adminUrl}</code>\n\n` +
+      
+      `🔑 <b>Токен действителен:</b> 15 минут\n` +
+      `🔐 <b>Одноразовый вход</b>\n\n` +
+      
+      `${EMOJI.WARNING} <b>Безопасность:</b>\n` +
+      `• Не передавайте ссылку третьим лицам\n` +
+      `• После входа ссылка станет недействительной\n` +
+      `• Все действия логируются`,
+      {
+        disable_web_page_preview: true,
+        reply_markup: new InlineKeyboard()
+          .url('🌐 Открыть панель', adminUrl)
+          .row()
+          .text('⬅️ Назад', 'admin')
+      }
+    );
+    
+    logger.info(`Admin token generated for ${ctx.from!.id}`);
+    
+  } catch (error) {
+    logger.error('Admin token generation error:', error);
+    await ctx.answerCallbackQuery('Ошибка генерации токена', { show_alert: true });
+  }
+}
+
+export async function handleOrderCancel(ctx: MyContext) {
+  try {
+    const orderId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery();
+    
+    const confirmKeyboard = new InlineKeyboard()
+      .text('✅ Да, отменить', `confirm_cancel_order_${orderId}`)
+      .text('❌ Нет', `admin_order_${orderId}`);
+    
+    await ctx.editMessageText(
+      `${EMOJI.WARNING} <b>Отмена заказа #${orderId}</b>\n\n` +
+      `Вы уверены, что хотите отменить этот заказ?\n` +
+      `Если заказ оплачен, будет создан возврат средств.`,
+      { reply_markup: confirmKeyboard }
+    );
+  } catch (error) {
+    logger.error('Order cancel error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}
+
+export async function handleConfirmCancelOrder(ctx: MyContext) {
+  try {
+    const orderId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery('Отменяю заказ...');
+    
+    const result = await apiClient.cancelOrder(orderId, 'Отменен администратором');
+    
+    await ctx.editMessageText(
+      `${EMOJI.SUCCESS} Заказ #${orderId} отменен.\n` +
+      `Клиент получит уведомление.`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text('⬅️ К заказам', 'admin_orders')
+          .text('⬅️ Меню', 'admin')
+      }
+    );
+    
+  } catch (error) {
+    logger.error('Confirm cancel order error:', error);
+    await ctx.answerCallbackQuery('Ошибка отмены', { show_alert: true });
+  }
+}
+
+export async function handleUserBan(ctx: MyContext) {
+  try {
+    const userId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery();
+    
+    await ctx.conversation.enter('adminUserBan', { userId });
+    
+  } catch (error) {
+    logger.error('User ban error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}
+
+export async function handleUserUnban(ctx: MyContext) {
+  try {
+    const userId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery('Разблокирую...');
+    
+    await apiClient.updateUser(userId, { isBanned: false });
+    
+    await ctx.reply(
+      `${EMOJI.SUCCESS} Пользователь #${userId} разблокирован.`
+    );
+    
+    // Обновляем сообщение
+    await handleUserDetails(ctx);
+    
+  } catch (error) {
+    logger.error('User unban error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}
+
+export async function handleUserBalance(ctx: MyContext) {
+  try {
+    const userId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery();
+    
+    await ctx.conversation.enter('adminUserBalance', { userId });
+    
+  } catch (error) {
+    logger.error('User balance error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}
+
+export async function handleUserBonus(ctx: MyContext) {
+  try {
+    const userId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery();
+    
+    await ctx.conversation.enter('adminUserBonus', { userId });
+    
+  } catch (error) {
+    logger.error('User bonus error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}
+
+export async function handleUserOrders(ctx: MyContext) {
+  try {
+    const userId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery();
+    
+    const orders = await apiClient.getUserOrders(userId);
+    
+    let message = `${EMOJI.PACKAGE} <b>Заказы пользователя #${userId}</b>\n\n`;
+    
+    if (orders.length === 0) {
+      message += 'У пользователя нет заказов.';
+    } else {
+      for (const order of orders.slice(0, 10)) {
+        message += `#${order.id} - ${ORDER_STATUS_LABELS[order.status]} - ${FormatUtils.formatMoney(order.totalAmount || 0)}\n`;
+      }
+      
+      if (orders.length > 10) {
+        message += `\n... и еще ${orders.length - 10} заказов`;
+      }
+    }
+    
+    await ctx.reply(message, {
+      reply_markup: new InlineKeyboard()
+        .text('⬅️ К пользователю', `admin_user_${userId}`)
+    });
+    
+  } catch (error) {
+    logger.error('User orders error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}
+
+export async function handleMessageUser(ctx: MyContext) {
+  try {
+    const userId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery();
+    
+    await ctx.conversation.enter('adminMessageUser', { userId });
+    
+  } catch (error) {
+    logger.error('Message user error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}
+
+export async function handleSupportChat(ctx: MyContext) {
+  try {
+    const chatId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery();
+    
+    const chat = await apiClient.getSupportChat(chatId);
+    
+    let message = `${EMOJI.SUPPORT} <b>Чат поддержки #${chat.id}</b>\n\n`;
+    message += `<b>Пользователь:</b> ${chat.user.firstName} ${chat.user.lastName || ''}\n`;
+    message += `<b>Телефон:</b> ${chat.user.phone}\n`;
+    message += `<b>Тема:</b> ${chat.subject}\n`;
+    message += `<b>Статус:</b> ${chat.status}\n`;
+    message += `<b>Создан:</b> ${FormatUtils.formatDate(chat.createdAt)}\n\n`;
+    
+    message += `<b>Последние сообщения:</b>\n\n`;
+    
+    for (const msg of chat.messages.slice(-5)) {
+      const emoji = msg.fromUser ? '👤' : '👨‍💼';
+      message += `${emoji} ${FormatUtils.formatDate(msg.createdAt)}:\n`;
+      message += `${msg.text.substring(0, 100)}${msg.text.length > 100 ? '...' : ''}\n\n`;
+    }
+    
+    const keyboard = new InlineKeyboard()
+      .text('💬 Ответить', `admin_support_reply_${chatId}`)
+      .text('✅ Закрыть чат', `admin_support_close_${chatId}`).row()
+      .text('🔴 Высокий приоритет', `admin_support_priority_${chatId}_high`)
+      .text('🟡 Средний', `admin_support_priority_${chatId}_medium`).row()
+      .text('⬅️ К поддержке', 'admin_support');
+    
+    await ctx.reply(message, { reply_markup: keyboard });
+    
+  } catch (error) {
+    logger.error('Support chat error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}
+
+export async function handleSupportClose(ctx: MyContext) {
+  try {
+    const chatId = parseInt(ctx.match![1]);
+    await ctx.answerCallbackQuery('Закрываю чат...');
+    
+    await apiClient.closeSupportChat(chatId);
+    
+    await ctx.reply(
+      `${EMOJI.SUCCESS} Чат #${chatId} закрыт.`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text('⬅️ К поддержке', 'admin_support')
+      }
+    );
+    
+  } catch (error) {
+    logger.error('Support close error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}
+
+export async function handleAdminSettings(ctx: MyContext) {
+  try {
+    if (!isSuperAdmin(ctx.from?.id!)) {
+      await ctx.answerCallbackQuery('Только для супер-админов', { show_alert: true });
+      return;
+    }
+    
+    await ctx.answerCallbackQuery();
+    
+    const keyboard = new InlineKeyboard()
+      .text('🌍 Управление странами', 'admin_settings_countries').row()
+      .text('🏪 Управление складами', 'admin_settings_warehouses').row()
+      .text('💰 Настройка тарифов', 'admin_settings_tariffs').row()
+      .text('🛍 Каталог товаров', 'admin_settings_products').row()
+      .text('👨‍💼 Администраторы', 'admin_settings_admins').row()
+      .text('🔧 Системные настройки', 'admin_settings_system').row()
+      .text('⬅️ Назад', 'admin');
+    
+    await ctx.editMessageText(
+      `${EMOJI.SETTINGS} <b>Настройки системы</b>\n\n` +
+      `Выберите раздел для настройки:`,
+      { reply_markup: keyboard }
+    );
+    
+  } catch (error) {
+    logger.error('Admin settings error:', error);
+    await ctx.answerCallbackQuery('Ошибка', { show_alert: true });
+  }
+}

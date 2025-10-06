@@ -331,6 +331,132 @@ export async function adminUserBalanceConversation(
   }
 }
 
+export async function adminUserBanConversation(
+  conversation: MyConversation,
+  ctx: MyContext
+) {
+  const userId = ctx.session.tempData?.userId;
+  
+  await ctx.reply(
+    `${EMOJI.WARNING} <b>Блокировка пользователя #${userId}</b>\n\n` +
+    `Укажите причину блокировки:`
+  );
+  
+  const reason = await conversation.form.text();
+  
+  const confirmKeyboard = new InlineKeyboard()
+    .text('✅ Заблокировать', 'confirm_ban')
+    .text('❌ Отмена', 'cancel_ban');
+  
+  await ctx.reply(
+    `Подтвердите блокировку пользователя #${userId}\n` +
+    `Причина: ${reason}`,
+    { reply_markup: confirmKeyboard }
+  );
+  
+  const confirmCtx = await conversation.waitForCallbackQuery(/^(confirm|cancel)_ban/);
+  await confirmCtx.answerCallbackQuery();
+  
+  if (confirmCtx.callbackQuery.data === 'confirm_ban') {
+    await apiClient.updateUser(userId, { 
+      isBanned: true,
+      banReason: reason,
+      bannedAt: new Date(),
+      bannedBy: ctx.from!.id
+    });
+    
+    await ctx.reply(
+      `${EMOJI.SUCCESS} Пользователь #${userId} заблокирован.\n` +
+      `Причина: ${reason}`
+    );
+    
+    // Уведомляем пользователя
+    try {
+      await ctx.api.sendMessage(
+        userId,
+        `${EMOJI.WARNING} <b>Ваш аккаунт заблокирован</b>\n\n` +
+        `Причина: ${reason}\n\n` +
+        `Для разблокировки обратитесь в поддержку.`
+      );
+    } catch {}
+  } else {
+    await ctx.reply('Блокировка отменена');
+  }
+}
+
+export async function adminUserBonusConversation(
+  conversation: MyConversation,
+  ctx: MyContext
+) {
+  const userId = ctx.session.tempData?.userId;
+  
+  await ctx.reply(
+    `${EMOJI.STAR} <b>Начисление бонусов пользователю #${userId}</b>\n\n` +
+    `Введите сумму бонусов в рублях:`
+  );
+  
+  const amountText = await conversation.form.text();
+  const amount = parseFloat(amountText);
+  
+  if (isNaN(amount) || amount <= 0) {
+    await ctx.reply('❌ Неверная сумма');
+    return;
+  }
+  
+  await ctx.reply('Укажите причину начисления:');
+  const reason = await conversation.form.text();
+  
+  await apiClient.updateUser(userId, {
+    bonusBalance: { increment: amount }
+  });
+  
+  await ctx.reply(
+    `${EMOJI.SUCCESS} Бонусы начислены!\n\n` +
+    `Пользователь: #${userId}\n` +
+    `Сумма: ${FormatUtils.formatMoney(amount)}\n` +
+    `Причина: ${reason}`
+  );
+  
+  // Уведомляем пользователя
+  try {
+    await ctx.api.sendMessage(
+      userId,
+      `${EMOJI.STAR} <b>Вам начислены бонусы!</b>\n\n` +
+      `Сумма: ${FormatUtils.formatMoney(amount)}\n` +
+      `Причина: ${reason}\n\n` +
+      `Проверьте баланс в /profile`
+    );
+  } catch {}
+}
+
+export async function adminMessageUserConversation(
+  conversation: MyConversation,
+  ctx: MyContext
+) {
+  const userId = ctx.session.tempData?.userId;
+  
+  await ctx.reply(
+    `${EMOJI.SUPPORT} <b>Сообщение пользователю #${userId}</b>\n\n` +
+    `Введите текст сообщения:`
+  );
+  
+  const message = await conversation.form.text();
+  
+  try {
+    await ctx.api.sendMessage(
+      userId,
+      `${EMOJI.INFO} <b>Сообщение от администрации</b>\n\n${message}`
+    );
+    
+    await ctx.reply(
+      `${EMOJI.SUCCESS} Сообщение отправлено пользователю #${userId}`
+    );
+  } catch (error) {
+    await ctx.reply('❌ Не удалось отправить сообщение');
+  }
+}
+
+
 function getAudienceName(audience: string): string {
   const names = {
     all: 'Все пользователи',

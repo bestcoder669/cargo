@@ -1,0 +1,76 @@
+// ==================== libs/shared/src/enums.ts ====================
+
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  PROCESSING = 'PROCESSING',
+  PURCHASING = 'PURCHASING',
+  WAREHOUSE_RECEIVED = 'WAREHOUSE_RECEIVED',
+  PACKING = 'PACKING',
+  SHIPPED = 'SHIPPED',
+  IN_TRANSIT = 'IN_TRANSIT',
+  CUSTOMS_CLEARANCE = 'CUSTOMS_CLEARANCE',
+  ARRIVED = 'ARRIVED',
+  LOCAL_DELIVERY = 'LOCAL_DELIVERY',
+  READY_FOR_PICKUP = 'READY_FOR_PICKUP',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED',
+  REFUNDED = 'REFUNDED'
+}
+
+export enum OrderType {
+  SHIPPING = 'SHIPPING',
+  PURCHASE = 'PURCHASE'
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  SUCCESS = 'SUCCESS',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+  REFUNDED = 'REFUNDED'
+}
+
+export enum PaymentMethod {
+  CARD = 'CARD',
+  CRYPTO = 'CRYPTO',
+  SBP = 'SBP',
+  BALANCE = 'BALANCE',
+  BONUS = 'BONUS'
+}
+
+export enum AdminRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
+  ORDER_MANAGER = 'ORDER_MANAGER',
+  SUPPORT_OPERATOR = 'SUPPORT_OPERATOR',
+  WAREHOUSE_OPERATOR = 'WAREHOUSE_OPERATOR',
+  CONTENT_MANAGER = 'CONTENT_MANAGER',
+  FINANCE_MANAGER = 'FINANCE_MANAGER'
+}
+
+export enum ChatStatus {
+  WAITING = 'WAITING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  RESOLVED = 'RESOLVED',
+  CLOSED = 'CLOSED'
+}
+
+export enum NotificationType {
+  ORDER_STATUS = 'ORDER_STATUS',
+  PAYMENT = 'PAYMENT',
+  PROMOTION = 'PROMOTION',
+  SYSTEM = 'SYSTEM',
+  SUPPORT = 'SUPPORT'
+}
+
+export enum BotCommand {
+  START = 'start',
+  HELP = 'help',
+  PROFILE = 'profile',
+  ORDERS = 'orders',
+  SUPPORT = 'support',
+  SETTINGS = 'settings',
+  ADMIN = 'admin'
+}
+

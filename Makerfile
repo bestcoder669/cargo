@@ -1,0 +1,67 @@
+.PHONY: help install dev build start stop restart logs clean test lint format
+
+help: ## Show this help message
+	@echo 'Usage: make [target]'
+	@echo ''
+	@echo 'Targets:'
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+install: ## Install dependencies
+	pnpm install
+	pnpm prisma:generate
+
+dev: ## Start development environment
+	docker-compose up -d postgres redis
+	pnpm dev
+
+build: ## Build all applications
+	pnpm build
+
+start: ## Start production environment
+	docker-compose up -d
+
+stop: ## Stop all containers
+	docker-compose down
+
+restart: stop start ## Restart all containers
+
+logs: ## Show container logs
+	docker-compose logs -f
+
+clean: ## Clean build artifacts and dependencies
+	pnpm clean
+	docker-compose down -v
+
+test: ## Run tests
+	pnpm test
+
+lint: ## Run linters
+	pnpm lint
+
+format: ## Format code
+	pnpm format
+
+migrate: ## Run database migrations
+	pnpm prisma:migrate
+
+seed: ## Seed database
+	pnpm prisma:seed
+
+backup: ## Backup database
+	docker exec cargoexpress-db pg_dump -U cargoexpress cargoexpress > backups/backup_$(shell date +%Y%m%d_%H%M%S).sql
+
+restore: ## Restore database from backup
+	@echo "Usage: make restore file=backups/backup_YYYYMMDD_HHMMSS.sql"
+	docker exec -i cargoexpress-db psql -U cargoexpress cargoexpress < $(file)
+
+deploy: ## Deploy to production
+	./scripts/deploy.sh
+
+monitoring: ## Open monitoring dashboard
+	open http://localhost:3000/metrics
+
+admin: ## Open admin panel
+	open http://localhost:5173
+
+db-studio: ## Open Prisma Studio
+	pnpm prisma:studio

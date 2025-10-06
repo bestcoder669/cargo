@@ -1,0 +1,609 @@
+// libs/prisma/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USERS ====================
+
+model User {
+  id                Int              @id @default(autoincrement())
+  telegramId        BigInt           @unique
+  username          String?
+  firstName         String
+  lastName          String?
+  phone             String           @unique
+  email             String           @unique
+  balance           Decimal          @default(0.00)
+  bonusBalance      Decimal          @default(0.00)
+  referralCode      String           @unique @default(cuid())
+  referredById      Int?
+  language          String           @default("ru")
+  isActive          Boolean          @default(true)
+  isBanned          Boolean          @default(false)
+  banReason         String?
+  cityId            Int?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  // Relations
+  city              City?            @relation(fields: [cityId], references: [id])
+  referredBy        User?            @relation("Referrals", fields: [referredById], references: [id])
+  referrals         User[]           @relation("Referrals")
+  addresses         UserAddress[]
+  orders            Order[]
+  transactions      Transaction[]
+  supportChats      SupportChat[]
+  notifications     Notification[]
+  favorites         FavoriteProduct[]
+  adminActions      AdminAction[]
+  
+  @@index([telegramId])
+  @@index([phone])
+  @@index([email])
+  @@index([referralCode])
+}
+
+model UserAddress {
+  id                Int              @id @default(autoincrement())
+  userId            Int
+  name              String           // Название адреса (Дом, Офис и т.д.)
+  cityId            Int
+  address           String
+  postalCode        String?
+  phone             String?
+  isDefault         Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  user              User             @relation(fields: [userId], references: [id])
+  city              City             @relation(fields: [cityId], references: [id])
+  orders            Order[]
+}
+
+// ==================== GEOGRAPHY ====================
+
+model Country {
+  id                 Int             @id @default(autoincrement())
+  name               String
+  nameEn             String?
+  code               String          @unique // ISO code (US, CN, TR, etc.)
+  flagEmoji          String
+  phoneCode          String?         // +1, +86, +90, etc.
+  currency           String          @default("USD")
+  isActive           Boolean         @default(true)
+  shippingAvailable  Boolean         @default(true)
+  purchaseAvailable  Boolean         @default(true)
+  purchaseCommission Decimal         @default(5.0) // Процент комиссии за выкуп
+  popularityScore    Int             @default(0)
+  sortOrder          Int             @default(0)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  
+  warehouses         Warehouse[]
+  tariffs            ShippingTariff[]
+  products           Product[]
+  stores             Store[]
+  
+  @@index([code])
+  @@index([isActive])
+}
+
+model City {
+  id          Int              @id @default(autoincrement())
+  name        String
+  nameEn      String?
+  region      String?
+  countryCode String           @default("RU")
+  isPopular   Boolean          @default(false)
+  population  Int?
+  timezone    String           @default("UTC+3")
+  sortOrder   Int              @default(0)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  
+  users       User[]
+  addresses   UserAddress[]
+  deliveryZones DeliveryZone[]
+  
+  @@index([countryCode])
+  @@index([isPopular])
+}
+
+// ==================== WAREHOUSES & SHIPPING ====================
+
+model Warehouse {
+  id                Int              @id @default(autoincrement())
+  countryId         Int
+  name              String
+  code              String           @unique // Уникальный код склада
+  address           String
+  city              String
+  postalCode        String?
+  phone             String?
+  email             String?
+  workingHours      String?          // Режим работы
+  instructions      String?          // Инструкции для отправки
+  isActive          Boolean          @default(true)
+  sortOrder         Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  country           Country          @relation(fields: [countryId], references: [id])
+  orders            Order[]
+  tariffs           ShippingTariff[]
+  inventory         WarehouseInventory[]
+  
+  @@index([countryId])
+  @@index([code])
+}
+
+model ShippingTariff {
+  id                Int              @id @default(autoincrement())
+  warehouseId       Int
+  countryId         Int
+  name              String           // Название тарифа
+  description       String?
+  pricePerKg        Decimal          // Цена за кг
+  minWeight         Decimal          @default(0.1) // Минимальный вес
+  maxWeight         Decimal?         // Максимальный вес
+  volumetricDivider Int              @default(5000) // Делитель для объемного веса
+  processingFee     Decimal          @default(0) // Фиксированная плата за обработку
+  customsFee        Decimal          @default(0) // Таможенный сбор
+  deliveryDays      String           // "5-7 дней"
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  warehouse         Warehouse        @relation(fields: [warehouseId], references: [id])
+  country           Country          @relation(fields: [countryId], references: [id])
+  
+  @@index([warehouseId])
+  @@index([countryId])
+}
+
+model DeliveryZone {
+  id                Int              @id @default(autoincrement())
+  cityId            Int
+  name              String
+  deliveryPrice     Decimal          @default(0)
+  deliveryDays      Int              @default(1)
+  isActive          Boolean          @default(true)
+  
+  city              City             @relation(fields: [cityId], references: [id])
+}
+
+// ==================== ORDERS ====================
+
+enum OrderType {
+  SHIPPING         // Доставка посылки
+  PURCHASE         // Выкуп товара
+}
+
+enum OrderStatus {
+  PENDING          // Ожидает оплаты
+  PAID             // Оплачен
+  PROCESSING       // В обработке
+  PURCHASING       // Покупается (для PURCHASE)
+  WAREHOUSE_RECEIVED // Принят на складе
+  PACKING          // Упаковывается
+  SHIPPED          // Отправлен
+  IN_TRANSIT       // В пути
+  CUSTOMS_CLEARANCE // Таможенное оформление
+  ARRIVED          // Прибыл в страну назначения
+  LOCAL_DELIVERY   // Местная доставка
+  READY_FOR_PICKUP // Готов к выдаче
+  DELIVERED        // Доставлен
+  CANCELLED        // Отменен
+  REFUNDED         // Возвращен
+}
+
+model Order {
+  id                Int              @id @default(autoincrement())
+  userId            Int
+  type              OrderType
+  trackNumber       String           @unique @default(cuid())
+  externalTrackNumber String?        // Трек от транспортной компании
+  status            OrderStatus      @default(PENDING)
+  warehouseId       Int?
+  addressId         Int?
+  
+  // Shipping details
+  weight            Decimal?         // Фактический вес
+  volumeWeight      Decimal?         // Объемный вес
+  length            Decimal?
+  width             Decimal?
+  height            Decimal?
+  
+  // Financial
+  declaredValue     Decimal?         // Заявленная стоимость
+  insuranceAmount   Decimal?         // Страховка
+  shippingCost      Decimal?         // Стоимость доставки
+  purchaseCost      Decimal?         // Стоимость товара (для PURCHASE)
+  commissionAmount  Decimal?         // Комиссия
+  totalAmount       Decimal?         // Итоговая сумма
+  
+  // Purchase details (for PURCHASE type)
+  productUrl        String?
+  productName       String?
+  productQuantity   Int?
+  productSize       String?
+  productColor      String?
+  productNote       String?
+  
+  // Additional info
+  description       String?
+  customerNote      String?
+  adminNote         String?
+  
+  // Timestamps
+  paidAt            DateTime?
+  shippedAt         DateTime?
+  deliveredAt       DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  // Relations
+  user              User             @relation(fields: [userId], references: [id])
+  warehouse         Warehouse?       @relation(fields: [warehouseId], references: [id])
+  address           UserAddress?     @relation(fields: [addressId], references: [id])
+  statusHistory     StatusHistory[]
+  transactions      Transaction[]
+  scannerLogs       ScannerLog[]
+  photos            OrderPhoto[]
+  
+  @@index([userId])
+  @@index([trackNumber])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model StatusHistory {
+  id                Int              @id @default(autoincrement())
+  orderId           Int
+  fromStatus        OrderStatus?
+  toStatus          OrderStatus
+  changedBy         String           // 'user', 'admin', 'system', 'scanner'
+  changedById       Int?             // ID пользователя/админа
+  comment           String?
+  metadata          Json?            // Дополнительные данные
+  createdAt         DateTime         @default(now())
+  
+  order             Order            @relation(fields: [orderId], references: [id])
+  
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model OrderPhoto {
+  id                Int              @id @default(autoincrement())
+  orderId           Int
+  url               String
+  thumbnailUrl      String?
+  type              String           // 'package', 'product', 'damage', etc.
+  description       String?
+  uploadedBy        Int?
+  createdAt         DateTime         @default(now())
+  
+  order             Order            @relation(fields: [orderId], references: [id])
+}
+
+// ==================== PRODUCTS & SHOPPING ====================
+
+model ProductCategory {
+  id          Int                @id @default(autoincrement())
+  name        String
+  nameEn      String?
+  icon        String             // Emoji или URL иконки
+  description String?
+  parentId    Int?
+  sortOrder   Int                @default(0)
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  
+  parent      ProductCategory?   @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    ProductCategory[]  @relation("CategoryHierarchy")
+  products    Product[]
+  
+  @@index([parentId])
+}
+
+model Store {
+  id          Int                @id @default(autoincrement())
+  name        String
+  url         String
+  logoUrl     String?
+  countryId   Int
+  description String?
+  commission  Decimal            @default(5.0) // Процент комиссии
+  rating      Decimal?           @default(0)
+  isVerified  Boolean            @default(false)
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  
+  country     Country            @relation(fields: [countryId], references: [id])
+  products    Product[]
+}
+
+model Product {
+  id          Int                @id @default(autoincrement())
+  storeId     Int?
+  categoryId  Int
+  countryId   Int
+  name        String
+  nameEn      String?
+  description String?
+  url         String?
+  imageUrl    String?
+  price       Decimal
+  oldPrice    Decimal?
+  currency    String             @default("USD")
+  inStock     Boolean            @default(true)
+  rating      Decimal?
+  reviewCount Int                @default(0)
+  soldCount   Int                @default(0)
+  tags        String[]           // Массив тегов
+  metadata    Json?              // Дополнительные характеристики
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  
+  store       Store?             @relation(fields: [storeId], references: [id])
+  category    ProductCategory    @relation(fields: [categoryId], references: [id])
+  country     Country            @relation(fields: [countryId], references: [id])
+  favorites   FavoriteProduct[]
+  
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([countryId])
+}
+
+model FavoriteProduct {
+  id          Int                @id @default(autoincrement())
+  userId      Int
+  productId   Int
+  createdAt   DateTime           @default(now())
+  
+  user        User               @relation(fields: [userId], references: [id])
+  product     Product            @relation(fields: [productId], references: [id])
+  
+  @@unique([userId, productId])
+}
+
+// ==================== SCANNER ====================
+
+model ScannerSession {
+  id                String           @id @default(cuid())
+  adminId           Int
+  targetStatus      OrderStatus
+  confirmationMode  Boolean          @default(true)
+  soundEnabled      Boolean          @default(true)
+  startedAt         DateTime         @default(now())
+  endedAt           DateTime?
+  totalScanned      Int              @default(0)
+  successfulScans   Int              @default(0)
+  failedScans       Int              @default(0)
+  
+  logs              ScannerLog[]
+}
+
+model ScannerLog {
+  id                Int              @id @default(autoincrement())
+  sessionId         String
+  orderId           Int?
+  trackNumber       String
+  success           Boolean
+  error             String?
+  oldStatus         OrderStatus?
+  newStatus         OrderStatus?
+  scannedAt         DateTime         @default(now())
+  
+  session           ScannerSession   @relation(fields: [sessionId], references: [id])
+  order             Order?           @relation(fields: [orderId], references: [id])
+  
+  @@index([sessionId])
+  @@index([trackNumber])
+}
+
+// ==================== PAYMENTS ====================
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  CRYPTO
+  SBP              // Система быстрых платежей (РФ)
+  BALANCE
+  BONUS
+}
+
+model Transaction {
+  id                String           @id @default(cuid())
+  userId            Int
+  orderId           Int?
+  type              String           // 'payment', 'refund', 'deposit', 'withdrawal', 'bonus'
+  amount            Decimal
+  currency          String           @default("RUB")
+  status            PaymentStatus    @default(PENDING)
+  method            PaymentMethod?
+  externalId        String?          // ID платежа во внешней системе
+  description       String?
+  metadata          Json?
+  processedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  user              User             @relation(fields: [userId], references: [id])
+  order             Order?           @relation(fields: [orderId], references: [id])
+  
+  @@index([userId])
+  @@index([orderId])
+  @@index([status])
+  @@index([externalId])
+}
+
+// ==================== SUPPORT ====================
+
+enum ChatStatus {
+  WAITING          // Ожидает ответа
+  IN_PROGRESS      // В работе
+  RESOLVED         // Решен
+  CLOSED           // Закрыт
+}
+
+model SupportChat {
+  id                Int              @id @default(autoincrement())
+  userId            Int
+  assignedToId      Int?
+  status            ChatStatus       @default(WAITING)
+  subject           String?
+  priority          Int              @default(0) // 0 - низкий, 1 - средний, 2 - высокий
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  user              User             @relation(fields: [userId], references: [id])
+  messages          SupportMessage[]
+  
+  @@index([userId])
+  @@index([status])
+}
+
+model SupportMessage {
+  id                Int              @id @default(autoincrement())
+  chatId            Int
+  fromUser          Boolean          // true - от пользователя, false - от оператора
+  operatorId        Int?
+  text              String
+  attachments       Json?            // Массив вложений
+  isRead            Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  
+  chat              SupportChat      @relation(fields: [chatId], references: [id])
+  
+  @@index([chatId])
+}
+
+// ==================== NOTIFICATIONS ====================
+
+model Notification {
+  id                Int              @id @default(autoincrement())
+  userId            Int
+  type              String           // 'order_status', 'payment', 'promotion', etc.
+  title             String
+  message           String
+  data              Json?
+  isRead            Boolean          @default(false)
+  sentToTelegram    Boolean          @default(false)
+  sentToEmail       Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  
+  user              User             @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([isRead])
+}
+
+// ==================== ADMIN ====================
+
+enum AdminRole {
+  SUPER_ADMIN
+  ORDER_MANAGER
+  SUPPORT_OPERATOR
+  WAREHOUSE_OPERATOR
+  CONTENT_MANAGER
+  FINANCE_MANAGER
+}
+
+model Admin {
+  id                Int              @id @default(autoincrement())
+  telegramId        BigInt           @unique
+  username          String?
+  firstName         String
+  lastName          String?
+  role              AdminRole        @default(ORDER_MANAGER)
+  permissions       String[]         // Массив разрешений
+  isActive          Boolean          @default(true)
+  lastLoginAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  actions           AdminAction[]
+  tokens            AdminToken[]
+  
+  @@index([telegramId])
+}
+
+model AdminToken {
+  id                String           @id @default(cuid())
+  adminId           Int
+  token             String           @unique
+  type              String           // 'access', 'refresh'
+  expiresAt         DateTime
+  usedAt            DateTime?
+  createdAt         DateTime         @default(now())
+  
+  admin             Admin            @relation(fields: [adminId], references: [id])
+  
+  @@index([token])
+  @@index([adminId])
+}
+
+model AdminAction {
+  id                Int              @id @default(autoincrement())
+  adminId           Int
+  userId            Int?
+  action            String           // 'order_status_changed', 'user_banned', etc.
+  entityType        String?          // 'order', 'user', 'product', etc.
+  entityId          String?
+  details           Json?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime         @default(now())
+  
+  admin             Admin            @relation(fields: [adminId], references: [id])
+  user              User?            @relation(fields: [userId], references: [id])
+  
+  @@index([adminId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ==================== WAREHOUSE INVENTORY ====================
+
+model WarehouseInventory {
+  id                Int              @id @default(autoincrement())
+  warehouseId       Int
+  sku               String
+  name              String
+  quantity          Int              @default(0)
+  reservedQuantity  Int              @default(0)
+  minQuantity       Int              @default(10)
+  unit              String           @default("pcs")
+  lastRestockedAt   DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  warehouse         Warehouse        @relation(fields: [warehouseId], references: [id])
+  
+  @@unique([warehouseId, sku])
+  @@index([sku])
+}

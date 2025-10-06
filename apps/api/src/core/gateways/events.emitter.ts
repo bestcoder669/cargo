@@ -1,0 +1,3 @@
+// Auto-generated scaffold. Replace with real implementation.
+
+export const Events = { emit: (_:string,__?:any)=>{} };

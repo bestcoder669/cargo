@@ -1,0 +1,120 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cargoexpress-db
+    environment:
+      POSTGRES_DB: cargoexpress
+      POSTGRES_USER: cargoexpress
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cargoexpress"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: cargoexpress-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-secret}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: cargoexpress-api
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://cargoexpress:${DB_PASSWORD:-secret}@postgres:5432/cargoexpress
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-secret}
+    ports:
+      - "3000:3000"
+      - "3001:3001" # WebSocket port
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./libs:/app/libs
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    container_name: cargoexpress-bot
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://cargoexpress:${DB_PASSWORD:-secret}@postgres:5432/cargoexpress
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-secret}
+      BOT_TOKEN: ${BOT_TOKEN}
+      API_URL: http://api:3000
+      WS_URL: ws://api:3001
+    depends_on:
+      - api
+      - postgres
+      - redis
+    volumes:
+      - ./apps/bot/src:/app/apps/bot/src
+      - ./libs:/app/libs
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    container_name: cargoexpress-admin
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      VITE_API_URL: ${API_URL:-http://localhost:3000}
+      VITE_WS_URL: ${WS_URL:-ws://localhost:3001}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/admin/src:/app/apps/admin/src
+      - ./libs:/app/libs
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: cargoexpress-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - api
+      - admin
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: cargoexpress-network

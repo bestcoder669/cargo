@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+docs/
+
+# Environment
+.env
+.env.*
+
+# Dependencies
+**/node_modules/
+
+# Build outputs
+**/dist/
+**/build/
+
+# IDE
+.vscode/
+.idea/
+
+# Testing
+**/coverage/
+**/*.test.ts
+**/*.spec.ts
+
+# Logs
+**/logs/
+**/*.log
+
+# Temporary files
+**/tmp/
+**/.cache/
+
+# OS files
+.DS_Store
+Thumbs.db

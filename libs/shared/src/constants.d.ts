@@ -1,0 +1,99 @@
+export declare const CONSTANTS: {
+    DEFAULT_PAGE_SIZE: number;
+    MAX_PAGE_SIZE: number;
+    MAX_FILE_SIZE: number;
+    MAX_ATTACHMENTS: number;
+    MAX_MESSAGE_LENGTH: number;
+    SESSION_TIMEOUT: number;
+    ADMIN_TOKEN_TTL: number;
+    SCANNER_SESSION_TIMEOUT: number;
+    CACHE_TTL: {
+        COUNTRIES: number;
+        CITIES: number;
+        WAREHOUSES: number;
+        PRODUCTS: number;
+        USER_PROFILE: number;
+        TARIFFS: number;
+    };
+    REDIS_KEYS: {
+        USER_SESSION: string;
+        ADMIN_SESSION: string;
+        ADMIN_TOKEN: string;
+        SCANNER_SESSION: string;
+        RATE_LIMIT: string;
+        CACHE: string;
+        NOTIFICATION_QUEUE: string;
+        BOT_STATUS: string;
+    };
+    RATE_LIMITS: {
+        API_CALLS: number;
+        BOT_MESSAGES: number;
+        SCANNER_SCANS: number;
+        SUPPORT_MESSAGES: number;
+    };
+    VOLUMETRIC_DIVIDER: number;
+    DEFAULT_PURCHASE_COMMISSION: number;
+    DEFAULT_SHIPPING_COMMISSION: number;
+    BOT_SCENES: {
+        REGISTRATION: string;
+        SHIPPING: string;
+        PURCHASE: string;
+        SUPPORT: string;
+        PAYMENT: string;
+        SETTINGS: string;
+    };
+    PERMISSIONS: {
+        SUPER_ADMIN: string[];
+        ORDER_MANAGER: string[];
+        SUPPORT_OPERATOR: string[];
+        WAREHOUSE_OPERATOR: string[];
+        CONTENT_MANAGER: string[];
+        FINANCE_MANAGER: string[];
+    };
+};
+export declare const ORDER_STATUS_LABELS: {
+    [x: number]: string;
+};
+export declare const EMOJI: {
+    USA: string;
+    CHINA: string;
+    TURKEY: string;
+    UK: string;
+    GERMANY: string;
+    JAPAN: string;
+    KOREA: string;
+    BACK: string;
+    NEXT: string;
+    HOME: string;
+    MENU: string;
+    CLOSE: string;
+    ADD: string;
+    EDIT: string;
+    DELETE: string;
+    SAVE: string;
+    SEARCH: string;
+    REFRESH: string;
+    SUCCESS: string;
+    ERROR: string;
+    WARNING: string;
+    INFO: string;
+    LOADING: string;
+    PACKAGE: string;
+    SHIPPING: string;
+    PURCHASE: string;
+    SUPPORT: string;
+    PROFILE: string;
+    SETTINGS: string;
+    BALANCE: string;
+    CALCULATOR: string;
+    NOTIFICATION: string;
+    FIRE: string;
+    STAR: string;
+    HEART: string;
+    PHONE: string;
+    EMAIL: string;
+    LOCATION: string;
+    CALENDAR: string;
+    CLOCK: string;
+};
+//# sourceMappingURL=constants.d.ts.map

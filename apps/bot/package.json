@@ -1,0 +1,37 @@
+{
+  "name": "@cargoexpress/bot",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "test": "vitest",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@cargoexpress/prisma": "workspace:*",
+    "@cargoexpress/shared": "workspace:*",
+    "@grammyjs/conversations": "^1.2.0",
+    "@grammyjs/hydrate": "^1.4.1",
+    "@grammyjs/i18n": "^1.0.2",
+    "@grammyjs/parse-mode": "^1.9.0",
+    "@grammyjs/ratelimiter": "^1.2.0",
+    "@grammyjs/runner": "^2.0.3",
+    "@grammyjs/storage-redis": "^2.4.2",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "grammy": "^1.19.3",
+    "ioredis": "^5.3.2",
+    "socket.io-client": "^4.7.2",
+    "winston": "^3.11.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.2",
+    "vitest": "^1.0.0"
+  }
+}
